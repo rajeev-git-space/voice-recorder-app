@@ -1,0 +1,23 @@
+.navbar {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 1rem;
+    background: linear-gradient(120deg, #a8e063, #56ab2f);
+    color: white;
+    font-size: 1.2rem;
+  }
+  
+  .nav-link {
+    text-decoration: none;
+    color: white;
+    font-weight: bold;
+    padding: 0.5rem 1rem;
+    transition: background-color 0.3s ease;
+  }
+  
+  .nav-link:hover {
+    background-color: #6bb23e;
+    border-radius: 5px;
+  }
+  

@@ -1,0 +1,132 @@
+.recording-container {
+  text-align: center;
+  padding: 2rem;
+  background: linear-gradient(120deg, #f8fff1, #eaffd1);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+h1 {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+  color: #2d2d2d;
+}
+
+.chunk-duration {
+  margin-bottom: 20px;
+}
+
+.chunk-duration input {
+  width: 60px;
+  padding: 0.5rem;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+button {
+  padding: 1rem 2rem;
+  font-size: 1.2rem;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.record-button, .stop-button, .play-button, .merge-button {
+  margin: 10px 0;
+  padding: 10px 20px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.stop-button {
+  background-color: #d9534f;
+  color: white;
+}
+
+.record-button {
+  background-color: #5cb85c;
+  color: white;
+}
+
+.play-button {
+  background-color: #5bc0de;
+  color: white;
+}
+
+.merge-button {
+  background-color: #ffa500;
+  color: white;
+}
+
+button:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+.recording-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.recordings-table th,
+.recordings-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+.recordings-table th {
+  background-color: #f4f4f4;
+}
+
+.recordings-table tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+.recordings-table tr:hover {
+  background-color: #eaffd1;
+}
+
+.recording-status {
+  margin: 1rem 0;
+  font-size: 1.2rem;
+  color: #2d2d2d;
+}
+
+.merge-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.merge-button:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+.recording-page {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.recording-left {
+  flex: 2;
+  padding: 20px;
+}
+
+.recording-right {
+  flex: 1;
+  padding: 20px;
+  border-left: 2px solid #ddd;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
