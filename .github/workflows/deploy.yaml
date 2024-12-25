@@ -55,8 +55,9 @@ jobs:
             resource_id=$(aws apigateway create-resource \
               --rest-api-id $api_gateway_id \
               --parent-id $root_resource_id \
-              --path-part audio/$endpoint \
+              --path-part audio-$endpoint \
               --query 'id' --output text)
+
 
             aws apigateway put-method \
               --rest-api-id $api_gateway_id \
