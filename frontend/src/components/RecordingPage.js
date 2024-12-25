@@ -14,34 +14,6 @@ const RecordingPage = () => {
   const recorderRef = useRef(null);
   const intervalRef = useRef(null);
 
-  // Simulate API call for fetching recordings
-  const fetchRecordings = () => {
-    setSavedRecordings([
-      {
-        id: 1,
-        name: 'Recording 1',
-        chunkCount: 5,
-        totalDuration: '50 sec',
-        recordedAt: '2024-12-24 10:00 AM',
-      },
-      {
-        id: 2,
-        name: 'Recording 2',
-        chunkCount: 3,
-        totalDuration: '30 sec',
-        recordedAt: '2024-12-24 11:00 AM',
-      },
-      // Add more recordings to simulate pagination
-      ...Array.from({ length: 12 }, (_, i) => ({
-        id: i + 3,
-        name: `Recording ${i + 3}`,
-        chunkCount: Math.floor(Math.random() * 5) + 1,
-        totalDuration: `${Math.floor(Math.random() * 60) + 10} sec`,
-        recordedAt: `2024-12-24 ${10 + (i % 12)}:00 AM`,
-      })),
-    ]);
-  };
-
   // Initialize recorder
   const initializeRecorder = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -62,11 +34,12 @@ const RecordingPage = () => {
     intervalRef.current = setInterval(async () => {
       const { blob } = await recorderRef.current.stop();
 
+      // Save the blob for later use
       setRecordedChunks((prev) => [...prev, blob]);
-      setChunkCount((prev) => prev + 1);
-      setTotalDuration((prev) => prev + chunkDuration);
 
       recorderRef.current.start();
+      setChunkCount((prev) => prev + 1);
+      setTotalDuration((prev) => prev + chunkDuration);
     }, chunkDuration * 1000);
   };
 
@@ -75,10 +48,29 @@ const RecordingPage = () => {
     clearInterval(intervalRef.current);
     if (recorderRef.current) {
       const { blob } = await recorderRef.current.stop();
-      const recordedTime = Math.floor(performance.now() / 1000) % chunkDuration;
+
+      // Save the blob for the last partial chunk
       setRecordedChunks((prev) => [...prev, blob]);
+
+      const recordedTime = Math.floor(performance.now() / 1000) % chunkDuration;
+      setChunkCount((prev) => prev + 1);
       setTotalDuration((prev) => prev + recordedTime);
+
+      // Save the recording
+      saveRecording(blob);
     }
+  };
+
+  const saveRecording = (audioBlob) => {
+    const newRecording = {
+      id: Date.now(),
+      name: `Recording ${savedRecordings.length + 1}`,
+      chunkCount,
+      totalDuration,
+      recordedAt: new Date().toLocaleString(),
+      audioBlob,
+    };
+    setSavedRecordings((prev) => [...prev, newRecording]);
   };
 
   const toggleRecording = () => {
@@ -94,28 +86,23 @@ const RecordingPage = () => {
     setChunkDuration(value);
   };
 
-//   const handlePlayAudio = () => {
-//     if (recordedChunks.length === 0) {
-//       alert('No audio chunks recorded yet!');
-//       return;
-//     }
+  const handlePlayAudio = () => {
+    if (recordedChunks.length === 0) {
+      alert('No audio chunks recorded yet!');
+      return;
+    }
 
-//     const audioURL = URL.createObjectURL(new Blob(recordedChunks));
-//     const audio = new Audio(audioURL);
-//     audio.play();
-//   };
+    const audioURL = URL.createObjectURL(new Blob(recordedChunks));
+    const audio = new Audio(audioURL);
+    audio.play();
+  };
 
   const handleMerge = () => {
     alert('Merging chunks and sending to the backend (placeholder for API integration)');
   };
 
-  const handlePlaySavedRecording = () => {
-    if (recordedChunks.length === 0) {
-      alert('No audio chunks recorded yet!');
-      return;
-    }
-    const mergedBlob = new Blob(recordedChunks);
-    const audioURL = URL.createObjectURL(mergedBlob);
+  const handlePlaySavedRecording = (audioBlob) => {
+    const audioURL = URL.createObjectURL(audioBlob);
     const audio = new Audio(audioURL);
     audio.play();
   };
@@ -127,10 +114,6 @@ const RecordingPage = () => {
   const prevPage = () => {
     setCurrentPage((prevPage) => Math.max(prevPage - 1, 1));
   };
-
-  React.useEffect(() => {
-    fetchRecordings();
-  }, []);
 
   const startIndex = (currentPage - 1) * itemsPerPage;
   const currentItems = savedRecordings.slice(startIndex, startIndex + itemsPerPage);
@@ -146,6 +129,7 @@ const RecordingPage = () => {
               <th>Chunks</th>
               <th>Total Duration</th>
               <th>Recorded At</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -154,56 +138,68 @@ const RecordingPage = () => {
                 <tr key={recording.id}>
                   <td>{recording.name}</td>
                   <td>{recording.chunkCount}</td>
-                  <td>{recording.totalDuration}</td>
+                  <td>{recording.totalDuration}s</td>
                   <td>{recording.recordedAt}</td>
+                  <td>
+                    <button
+                      onClick={() => handlePlaySavedRecording(recording.audioBlob)}
+                      className="play-button"
+                    >
+                      Play
+                    </button>
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan="4">No recordings found.</td>
+                <td colSpan="5">No recordings found.</td>
               </tr>
             )}
           </tbody>
         </table>
         <div className="pagination-controls">
-          <button onClick={prevPage} disabled={currentPage === 1}>Previous</button>
-          <button onClick={nextPage} disabled={startIndex + itemsPerPage >= savedRecordings.length}>Next</button>
+          <button onClick={prevPage} disabled={currentPage === 1}>
+            Previous
+          </button>
+          <button
+            onClick={nextPage}
+            disabled={currentPage * itemsPerPage >= savedRecordings.length}
+          >
+            Next
+          </button>
         </div>
       </div>
 
       <div className="recording-right">
-        <h1>Voice Recorder</h1>
-        <div className="chunk-duration">
-          <label>Chunk Duration (seconds): </label>
-          <input
-            type="number"
-            value={chunkDuration}
-            onChange={handleChunkDurationChange}
-            min="1"
-            max="60"
-            disabled={isRecording}
-          />
-        </div>
-
         <div className="recording-status">
-          <p><strong>Chunks Recorded:</strong> {chunkCount}</p>
-          <p><strong>Total Duration:</strong> {totalDuration} sec</p>
+          <h3>{isRecording ? 'Recording...' : 'Recording Stopped'}</h3>
+          <p>Total Duration: {totalDuration}s</p>
+          <p>Chunks Recorded: {chunkCount}</p>
         </div>
 
         <div className="recording-controls">
-          <button
-            onClick={toggleRecording}
-            className={isRecording ? 'stop-button' : 'record-button'}
-          >
+          <button onClick={toggleRecording} className={isRecording ? 'stop-button' : 'record-button'}>
             {isRecording ? 'Stop Recording' : 'Start Recording'}
           </button>
-
-          <button onClick={handlePlaySavedRecording} className="play-button">
-            Play Recorded Audio
+          <button
+            onClick={handlePlayAudio}
+            className="play-button"
+            disabled={recordedChunks.length === 0}
+          >
+            Play All
           </button>
-
-          <button onClick={handleMerge} className="merge-button" disabled={chunkCount === 0}>
-            Merge Chunks
+          <div className="chunk-duration">
+            <label>Chunk Duration (seconds): </label>
+            <input
+              type="number"
+              value={chunkDuration}
+              onChange={handleChunkDurationChange}
+              min="1"
+              max="60"
+            />
+          </div>
+          <button onClick={handleMerge} className="merge-button">
+            Merge and Send
           </button>
         </div>
       </div>
