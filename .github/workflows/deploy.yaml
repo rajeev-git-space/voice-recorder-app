@@ -21,85 +21,58 @@ jobs:
           aws-region: us-east-1
 
       - name: Install Dependencies
-        run: |
-          cd backend
-          npm install
+        working-directory: backend
+        run: npm install
 
       - name: Package Lambda Function
+        working-directory: backend
         run: |
-          cd backend
-          mkdir -p deployment_package
-          cp -r src node_modules package.json package-lock.json deployment_package/
-          cd deployment_package
           zip -r ../lambda_function.zip .
-          cd ..
 
-      - name: Deploy Lambda Functions
+      - name: Deploy Lambda Function
         run: |
-          aws lambda create-function \
-            --function-name AddAudio \
-            --runtime nodejs18.x \
-            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_LAMBDA_ROLE }} \
-            --handler src/controllers/audioController.addAudio \
-            --zip-file fileb://backend/lambda_function.zip || \
-          aws lambda update-function-code \
-            --function-name AddAudio \
-            --zip-file fileb://backend/lambda_function.zip
+          if aws lambda get-function --function-name VoiceRecorderAPI; then
+            aws lambda update-function-code \
+              --function-name VoiceRecorderAPI \
+              --zip-file fileb://lambda_function.zip
+          else
+            aws lambda create-function \
+              --function-name VoiceRecorderAPI \
+              --runtime nodejs18.x \
+              --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_LAMBDA_ROLE }} \
+              --handler src/index.handler \
+              --zip-file fileb://lambda_function.zip
+          fi
 
-          aws lambda create-function \
-            --function-name MergeAudio \
-            --runtime nodejs18.x \
-            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_LAMBDA_ROLE }} \
-            --handler src/controllers/audioController.mergeAudio \
-            --zip-file fileb://backend/lambda_function.zip || \
-          aws lambda update-function-code \
-            --function-name MergeAudio \
-            --zip-file fileb://backend/lambda_function.zip
-
-          aws lambda create-function \
-            --function-name ListAudio \
-            --runtime nodejs18.x \
-            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_LAMBDA_ROLE }} \
-            --handler src/controllers/audioController.listAudio \
-            --zip-file fileb://backend/lambda_function.zip || \
-          aws lambda update-function-code \
-            --function-name ListAudio \
-            --zip-file fileb://backend/lambda_function.zip
-
-      - name: Create API Gateway
+      - name: Create API Gateway and Integrate with Lambda
         run: |
           api_gateway_id=$(aws apigateway create-rest-api --name "VoiceRecorderAPI" --query 'id' --output text)
 
           root_resource_id=$(aws apigateway get-resources --rest-api-id $api_gateway_id --query 'items[0].id' --output text)
 
-          # Add POST for AddAudio
-          aws apigateway put-method \
-            --rest-api-id $api_gateway_id \
-            --resource-id $root_resource_id \
-            --http-method POST \
-            --authorization-type "NONE"
+          # Add routes
+          for endpoint in add merge list; do
+            resource_id=$(aws apigateway create-resource \
+              --rest-api-id $api_gateway_id \
+              --parent-id $root_resource_id \
+              --path-part audio/$endpoint \
+              --query 'id' --output text)
 
-          aws apigateway put-integration \
-            --rest-api-id $api_gateway_id \
-            --resource-id $root_resource_id \
-            --http-method POST \
-            --type AWS_PROXY \
-            --uri "arn:aws:apigateway:${{ secrets.AWS_REGION }}:lambda:path/2015-03-31/functions/arn:aws:lambda:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:function:AddAudio/invocations"
+            aws apigateway put-method \
+              --rest-api-id $api_gateway_id \
+              --resource-id $resource_id \
+              --http-method POST \
+              --authorization-type "NONE"
 
-          # Add GET for ListAudio
-          aws apigateway put-method \
-            --rest-api-id $api_gateway_id \
-            --resource-id $root_resource_id \
-            --http-method GET \
-            --authorization-type "NONE"
+            aws apigateway put-integration \
+              --rest-api-id $api_gateway_id \
+              --resource-id $resource_id \
+              --http-method POST \
+              --type AWS_PROXY \
+              --uri "arn:aws:apigateway:${{ secrets.AWS_REGION }}:lambda:path/2015-03-31/functions/arn:aws:lambda:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:function:VoiceRecorderAPI/invocations"
+          done
 
-          aws apigateway put-integration \
-            --rest-api-id $api_gateway_id \
-            --resource-id $root_resource_id \
-            --http-method GET \
-            --type AWS_PROXY \
-            --uri "arn:aws:apigateway:${{ secrets.AWS_REGION }}:lambda:path/2015-03-31/functions/arn:aws:lambda:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:function:ListAudio/invocations"
-
+          # Deploy the API
           aws apigateway create-deployment \
             --rest-api-id $api_gateway_id \
             --stage-name qa
@@ -109,22 +82,8 @@ jobs:
       - name: Add Permissions to Lambda
         run: |
           aws lambda add-permission \
-            --function-name AddAudio \
-            --statement-id apigateway-post \
+            --function-name VoiceRecorderAPI \
+            --statement-id apigateway-invoke \
             --action lambda:InvokeFunction \
             --principal apigateway.amazonaws.com \
-            --source-arn "arn:aws:execute-api:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:${api_gateway_id}/*/POST/"
-
-          aws lambda add-permission \
-            --function-name MergeAudio \
-            --statement-id apigateway-post \
-            --action lambda:InvokeFunction \
-            --principal apigateway.amazonaws.com \
-            --source-arn "arn:aws:execute-api:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:${api_gateway_id}/*/POST/"
-
-          aws lambda add-permission \
-            --function-name ListAudio \
-            --statement-id apigateway-get \
-            --action lambda:InvokeFunction \
-            --principal apigateway.amazonaws.com \
-            --source-arn "arn:aws:execute-api:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:${api_gateway_id}/*/GET/"
+            --source-arn "arn:aws:execute-api:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:${api_gateway_id}/*"
