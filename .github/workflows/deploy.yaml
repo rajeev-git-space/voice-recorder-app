@@ -21,10 +21,13 @@ jobs:
           aws-region: us-east-1
 
       - name: Install Dependencies
-        run: npm install
+        run: |
+          cd backend
+          npm install
 
       - name: Package Lambda Function
         run: |
+          cd backend
           mkdir -p deployment_package
           cp -r src node_modules package.json package-lock.json deployment_package/
           cd deployment_package
@@ -37,31 +40,31 @@ jobs:
             --function-name AddAudio \
             --runtime nodejs18.x \
             --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_LAMBDA_ROLE }} \
-            --handler src/app.addAudio \
-            --zip-file fileb://lambda_function.zip || \
+            --handler src/controllers/audioController.addAudio \
+            --zip-file fileb://backend/lambda_function.zip || \
           aws lambda update-function-code \
             --function-name AddAudio \
-            --zip-file fileb://lambda_function.zip
+            --zip-file fileb://backend/lambda_function.zip
 
           aws lambda create-function \
             --function-name MergeAudio \
             --runtime nodejs18.x \
             --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_LAMBDA_ROLE }} \
-            --handler src/app.mergeAudio \
-            --zip-file fileb://lambda_function.zip || \
+            --handler src/controllers/audioController.mergeAudio \
+            --zip-file fileb://backend/lambda_function.zip || \
           aws lambda update-function-code \
             --function-name MergeAudio \
-            --zip-file fileb://lambda_function.zip
+            --zip-file fileb://backend/lambda_function.zip
 
           aws lambda create-function \
             --function-name ListAudio \
             --runtime nodejs18.x \
             --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_LAMBDA_ROLE }} \
-            --handler src/app.listAudio \
-            --zip-file fileb://lambda_function.zip || \
+            --handler src/controllers/audioController.listAudio \
+            --zip-file fileb://backend/lambda_function.zip || \
           aws lambda update-function-code \
             --function-name ListAudio \
-            --zip-file fileb://lambda_function.zip
+            --zip-file fileb://backend/lambda_function.zip
 
       - name: Create API Gateway
         run: |
@@ -69,6 +72,7 @@ jobs:
 
           root_resource_id=$(aws apigateway get-resources --rest-api-id $api_gateway_id --query 'items[0].id' --output text)
 
+          # Add POST for AddAudio
           aws apigateway put-method \
             --rest-api-id $api_gateway_id \
             --resource-id $root_resource_id \
@@ -81,6 +85,20 @@ jobs:
             --http-method POST \
             --type AWS_PROXY \
             --uri "arn:aws:apigateway:${{ secrets.AWS_REGION }}:lambda:path/2015-03-31/functions/arn:aws:lambda:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:function:AddAudio/invocations"
+
+          # Add GET for ListAudio
+          aws apigateway put-method \
+            --rest-api-id $api_gateway_id \
+            --resource-id $root_resource_id \
+            --http-method GET \
+            --authorization-type "NONE"
+
+          aws apigateway put-integration \
+            --rest-api-id $api_gateway_id \
+            --resource-id $root_resource_id \
+            --http-method GET \
+            --type AWS_PROXY \
+            --uri "arn:aws:apigateway:${{ secrets.AWS_REGION }}:lambda:path/2015-03-31/functions/arn:aws:lambda:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:function:ListAudio/invocations"
 
           aws apigateway create-deployment \
             --rest-api-id $api_gateway_id \
