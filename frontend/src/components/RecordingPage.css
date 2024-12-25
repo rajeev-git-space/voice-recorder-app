@@ -135,10 +135,10 @@ button:hover:not(:disabled) {
   color: white;
 }
 
-.play-button {
+/* .play-button {
   background-color: #007bff;
   color: white;
-}
+} */
 
 .merge-button {
   background-color: #ffc107;
@@ -179,4 +179,77 @@ button:hover:not(:disabled) {
   .recording-right {
     border-top: 1px solid #ddd;
   }
+}
+
+.recordings-table button {
+  margin-right: 10px;
+}
+
+.play-button {
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.play-button:hover {
+  background-color: #45a049;
+}
+
+.download-button {
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.download-button:hover {
+  background-color: #1e88e5;
+}
+
+.remove-button {
+  background-color: #f44336;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.remove-button:hover {
+  background-color: #e53935;
+}
+
+/* Icon styles for actions */
+.play-icon {
+  color: #4caf50;
+  font-size: 18px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.play-icon:hover {
+  color: #45a049;
+}
+
+.download-icon {
+  color: #2196f3;
+  font-size: 18px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.download-icon:hover {
+  color: #1e88e5;
+}
+
+.remove-icon {
+  color: #f44336;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.remove-icon:hover {
+  color: #e53935;
 }

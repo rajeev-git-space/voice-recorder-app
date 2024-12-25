@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Recorder from 'recorder-js';
 import './RecordingPage.css';
 
@@ -14,7 +14,17 @@ const RecordingPage = () => {
   const recorderRef = useRef(null);
   const intervalRef = useRef(null);
 
-  // Initialize recorder
+  // Load recordings from localStorage on mount
+  useEffect(() => {
+    const storedRecordings = JSON.parse(localStorage.getItem('savedRecordings')) || [];
+    setSavedRecordings(storedRecordings);
+  }, []);
+
+  // Save recordings to localStorage whenever they are updated
+  useEffect(() => {
+    localStorage.setItem('savedRecordings', JSON.stringify(savedRecordings));
+  }, [savedRecordings]);
+
   const initializeRecorder = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -48,20 +58,18 @@ const RecordingPage = () => {
     clearInterval(intervalRef.current);
     if (recorderRef.current) {
       const { blob } = await recorderRef.current.stop();
-
-      // Save the blob for the last partial chunk
       setRecordedChunks((prev) => [...prev, blob]);
 
       const recordedTime = Math.floor(performance.now() / 1000) % chunkDuration;
       setChunkCount((prev) => prev + 1);
       setTotalDuration((prev) => prev + recordedTime);
-
-      // Save the recording
-      saveRecording(blob);
     }
   };
 
-  const saveRecording = (audioBlob) => {
+  const saveRecording = () => {
+    if (recordedChunks.length === 0) return;
+
+    const audioBlob = new Blob(recordedChunks);
     const newRecording = {
       id: Date.now(),
       name: `Recording ${savedRecordings.length + 1}`,
@@ -87,24 +95,29 @@ const RecordingPage = () => {
   };
 
   const handlePlayAudio = () => {
-    if (recordedChunks.length === 0) {
-      alert('No audio chunks recorded yet!');
-      return;
-    }
+    if (recordedChunks.length === 0) return;
 
     const audioURL = URL.createObjectURL(new Blob(recordedChunks));
     const audio = new Audio(audioURL);
     audio.play();
   };
 
-  const handleMerge = () => {
-    alert('Merging chunks and sending to the backend (placeholder for API integration)');
-  };
-
   const handlePlaySavedRecording = (audioBlob) => {
     const audioURL = URL.createObjectURL(audioBlob);
     const audio = new Audio(audioURL);
     audio.play();
+  };
+
+  const handleDownload = (audioBlob, name) => {
+    const audioURL = URL.createObjectURL(audioBlob);
+    const link = document.createElement('a');
+    link.href = audioURL;
+    link.download = name;
+    link.click();
+  };
+
+  const handleRemove = (id) => {
+    setSavedRecordings((prev) => prev.filter((recording) => recording.id !== id));
   };
 
   const nextPage = () => {
@@ -141,12 +154,21 @@ const RecordingPage = () => {
                   <td>{recording.totalDuration}s</td>
                   <td>{recording.recordedAt}</td>
                   <td>
-                    <button
+                    <i
+                      className="fas fa-play action-icon play-icon"
+                      title="Play"
                       onClick={() => handlePlaySavedRecording(recording.audioBlob)}
-                      className="play-button"
-                    >
-                      Play
-                    </button>
+                    ></i>
+                    <i
+                      className="fas fa-download action-icon download-icon"
+                      title="Download"
+                      onClick={() => handleDownload(recording.audioBlob, recording.name)}
+                    ></i>
+                    <i
+                      className="fas fa-trash action-icon remove-icon"
+                      title="Remove"
+                      onClick={() => handleRemove(recording.id)}
+                    ></i>
                   </td>
                 </tr>
               ))
@@ -198,7 +220,7 @@ const RecordingPage = () => {
               max="60"
             />
           </div>
-          <button onClick={handleMerge} className="merge-button">
+          <button onClick={saveRecording} className="merge-button">
             Merge and Send
           </button>
         </div>
