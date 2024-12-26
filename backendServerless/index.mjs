@@ -1,6 +1,7 @@
 import { addAudio } from "./helpers/addAudio.mjs";
 import { mergeAudio } from "./helpers/mergeAudio.mjs";
 import { retrieveAudio } from "./helpers/retrieveAudio.mjs";
+import { removeAudio } from "./helpers/removeAudio.mjs";
 
 export const handler = async (event) => {
     console.log(event);
@@ -14,8 +15,11 @@ export const handler = async (event) => {
             case '/audio/merge':
                 response = await mergeAudio(event);
                 break;
-            case '/audio/retrieve':
+            case '/audio/list':
                 response = await retrieveAudio(event);
+                break;
+            case '/audio/remove':
+                response = await removeAudio(event);
                 break;
             default:
                 response = {

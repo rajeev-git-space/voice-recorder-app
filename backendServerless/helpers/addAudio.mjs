@@ -1,8 +1,19 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 const s3 = new S3Client({ region: 'ap-south-1' }); // Specify your AWS region
+import { validateAddAudio } from '../validations/audioValidations.mjs';
 
 export const addAudio = async (event) => {
-    const { chunk_uuid, blob_data } = JSON.parse(event.body);
+    const input = JSON.parse(event.body);
+    const { error } = validateAddAudio(input);
+
+    if (error) {
+        return {
+            statusCode: 400,
+            body: JSON.stringify({ message: error.details[0].message }),
+        };
+    }
+
+    const { chunk_uuid, blob_data } = input;
 
     if (!chunk_uuid || !blob_data) {
         return {
