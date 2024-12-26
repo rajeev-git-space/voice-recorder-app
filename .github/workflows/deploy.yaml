@@ -1,0 +1,92 @@
+name: Deploy to AWS Lambda
+
+on:
+  push:
+    branches:
+      - qa
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      - name: Install Dependencies
+        working-directory: backend
+        run: npm install
+
+      - name: Package Lambda Function
+        working-directory: backend
+        run: |
+          zip -r ../lambda_function.zip .
+
+      - name: Deploy Lambda Function
+        run: |
+          if aws lambda get-function --function-name VoiceRecorderAPI; then
+            aws lambda update-function-code \
+              --function-name VoiceRecorderAPI \
+              --zip-file fileb://lambda_function.zip
+          else
+            aws lambda create-function \
+              --function-name VoiceRecorderAPI \
+              --runtime nodejs18.x \
+              --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_LAMBDA_ROLE }} \
+              --handler src/index.handler \
+              --zip-file fileb://lambda_function.zip
+          fi
+
+      - name: Create API Gateway Resources and Methods
+        run: |
+          # Create the API Gateway REST API
+          api_gateway_id=$(aws apigateway create-rest-api --name "VoiceRecorderAPI" --query 'id' --output text)
+
+          # Get the root resource ID
+          root_resource_id=$(aws apigateway get-resources --rest-api-id $api_gateway_id --query 'items[0].id' --output text)
+
+          # Create a 'audio' resource under root
+          audio_resource_id=$(aws apigateway create-resource \
+            --rest-api-id $api_gateway_id \
+            --parent-id $root_resource_id \
+            --path-part audio \
+            --query 'id' --output text)
+
+          # Add POST method for 'audio'
+          aws apigateway put-method \
+            --rest-api-id $api_gateway_id \
+            --resource-id $audio_resource_id \
+            --http-method POST \
+            --authorization-type "NONE"
+
+          # Integrate POST with Lambda
+          aws apigateway put-integration \
+            --rest-api-id $api_gateway_id \
+            --resource-id $audio_resource_id \
+            --http-method POST \
+            --type AWS_PROXY \
+            --integration-http-method POST \
+            --uri "arn:aws:apigateway:${{ secrets.AWS_REGION }}:lambda:path/2015-03-31/functions/arn:aws:lambda:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:function:VoiceRecorderApp/invocations"
+
+          # Deploy the API
+          aws apigateway create-deployment \
+            --rest-api-id $api_gateway_id \
+            --stage-name qa
+
+          echo "API Gateway URL: https://${api_gateway_id}.execute-api.${{ secrets.AWS_REGION }}.amazonaws.com/qa/audio"
+
+      - name: Add Permissions to Lambda
+        run: |
+          aws lambda add-permission \
+            --function-name VoiceRecorderApp \
+            --statement-id apigateway-post \
+            --action lambda:InvokeFunction \
+            --principal apigateway.amazonaws.com \
+            --source-arn "arn:aws:execute-api:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:${api_gateway_id}/*/POST/audio"
