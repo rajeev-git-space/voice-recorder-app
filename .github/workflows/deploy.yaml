@@ -26,24 +26,21 @@ jobs:
           cd backendServerless
           npm install
 
-      # Step 4: Configure AWS credentials
-      - name: Configure AWS credentials
+      # Step 4: Create Lambda Layer for uuid
+      - name: Create Lambda Layer for uuid
+        run: |
+          mkdir -p my-layer/nodejs
+          npm install uuid --prefix ./my-layer/nodejs
+          cd my-layer
+          zip -r layer.zip nodejs
+
+      # Step 5: Configure AWS credentials
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
-
-      # Step 5: Create Lambda Layer for uuid
-      - name: Create Lambda Layer for uuid
-        run: |
-          # Create the directory for the layer and install uuid
-          mkdir -p my-layer/nodejs
-          npm install uuid --prefix ./my-layer/nodejs
-          
-          # Zip the layer
-          cd my-layer
-          zip -r layer.zip nodejs
 
       # Step 6: Publish Lambda Layer
       - name: Publish Lambda Layer
@@ -64,38 +61,53 @@ jobs:
           zip -r lambda.zip .
 
       # Step 8: Deploy Lambda function
-      - name: Deploy Lambda
+      - name: Deploy Lambda function
         run: |
-          # Deploy or update the Lambda function
-          aws lambda create-function \
-            --function-name VoiceRecorderFunction \
-            --runtime nodejs18.x \
-            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_LAMBDA_ROLE }} \
-            --handler index.handler \
-            --zip-file fileb://backendServerless/lambda.zip || \
-          aws lambda update-function-code \
-            --function-name VoiceRecorderFunction \
-            --zip-file fileb://backendServerless/lambda.zip
+          FUNCTION_EXISTS=$(aws lambda get-function --function-name VoiceRecorderFunction --query 'Configuration.FunctionName' --output text || echo "NOT_FOUND")
 
-          # Attach the Lambda Layer
-          aws lambda update-function-configuration \
-            --function-name VoiceRecorderFunction \
-            --layers ${{ env.LAYER_ARN }} \
-            --region ap-south-1
+          if [ "$FUNCTION_EXISTS" = "NOT_FOUND" ]; then
+            echo "Creating Lambda function..."
+            aws lambda create-function \
+              --function-name VoiceRecorderFunction \
+              --runtime nodejs18.x \
+              --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_LAMBDA_ROLE }} \
+              --handler index.handler \
+              --zip-file fileb://backendServerless/lambda.zip \
+              --timeout 6 \
+              --memory-size 512 \
+              --region ap-south-1
+          else
+            echo "Updating Lambda function code..."
+            aws lambda update-function-code \
+              --function-name VoiceRecorderFunction \
+              --zip-file fileb://backendServerless/lambda.zip \
+              --region ap-south-1
+
+            echo "Updating Lambda function configuration..."
+            while true; do
+              UPDATE_STATUS=$(aws lambda get-function-configuration --function-name VoiceRecorderFunction --query 'State' --output text)
+              if [ "$UPDATE_STATUS" = "Active" ]; then
+                aws lambda update-function-configuration \
+                  --function-name VoiceRecorderFunction \
+                  --timeout 6 \
+                  --memory-size 512 \
+                  --layers ${{ env.LAYER_ARN }} \
+                  --region ap-south-1
+                break
+              else
+                echo "Lambda function is still being updated, retrying in 10 seconds..."
+                sleep 10
+              fi
+            done
+          fi
 
       # Step 9: Set up API Gateway
       - name: Set up API Gateway
         run: |
-          # Create REST API
           REST_API_ID=$(aws apigateway create-rest-api --name "VoiceRecorderAPI" --query 'id' --output text --region ap-south-1)
-          
-          # Get root resource ID
           ROOT_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query 'items[0].id' --output text --region ap-south-1)
-          
-          # Create /audio resource
           AUDIO_RESOURCE_ID=$(aws apigateway create-resource --rest-api-id $REST_API_ID --parent-id $ROOT_RESOURCE_ID --path-part audio --query 'id' --output text --region ap-south-1)
           
-          # Create POST /audio/add
           aws apigateway put-method \
             --rest-api-id $REST_API_ID \
             --resource-id $AUDIO_RESOURCE_ID \
@@ -112,7 +124,6 @@ jobs:
             --uri "arn:aws:apigateway:ap-south-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-south-1:${{ secrets.AWS_ACCOUNT_ID }}:function:VoiceRecorderFunction/invocations" \
             --region ap-south-1
           
-          # Deploy API
           aws apigateway create-deployment \
             --rest-api-id $REST_API_ID \
             --stage-name dev \
