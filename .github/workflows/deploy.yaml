@@ -41,20 +41,6 @@ jobs:
           zip -r layer.zip nodejs
           cd ..
 
-          # Publish the layer to AWS Lambda
-          LAYER_NAME="VoiceRecorderDependenciesLayer"
-          REGION="ap-south-1"
-          LAYER_VERSION_ARN=$(aws lambda publish-layer-version \
-            --layer-name $LAYER_NAME \
-            --description "Dependencies for Voice Recorder App" \
-            --zip-file fileb://$LAYER_DIR/layer.zip \
-            --compatible-runtimes nodejs16.x nodejs18.x \
-            --region $REGION \
-            --query 'LayerVersionArn' --output text)
-
-          echo "Layer published: $LAYER_VERSION_ARN"
-          echo "LAYER_VERSION_ARN=$LAYER_VERSION_ARN" >> $GITHUB_ENV
-
       # Step 5: Configure AWS credentials
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -66,14 +52,37 @@ jobs:
       # Step 6: Publish Lambda Layer
       - name: Publish Lambda Layer
         run: |
-          echo "Reusing published layer: ${{ env.LAYER_VERSION_ARN }}"
+          echo "Publishing or reusing Lambda Layer..."
+          LAYER_NAME="VoiceRecorderDependenciesLayer"
+          REGION="ap-south-1"
 
-      # Step 7: Package Lambda function without node_modules
+          # Publish the layer to AWS Lambda
+          LAYER_VERSION_ARN=$(aws lambda publish-layer-version \
+            --layer-name $LAYER_NAME \
+            --description "Dependencies for Voice Recorder App" \
+            --zip-file fileb://lambda-layer/layer.zip \
+            --compatible-runtimes nodejs16.x nodejs18.x \
+            --region $REGION \
+            --query 'LayerVersionArn' --output text)
+
+          echo "Layer published: $LAYER_VERSION_ARN"
+          echo "LAYER_VERSION_ARN=$LAYER_VERSION_ARN" >> $GITHUB_ENV
+
+          # Cleanup old layers if necessary
+          OLD_LAYERS=$(aws lambda list-layer-versions --layer-name $LAYER_NAME --query 'LayerVersions[1:].LayerVersionArn' --output text)
+          if [ -n "$OLD_LAYERS" ]; then
+            echo "Cleaning up old Lambda layers..."
+            for ARN in $OLD_LAYERS; do
+              aws lambda delete-layer-version --layer-name $LAYER_NAME --version-number $(echo $ARN | awk -F':' '{print $NF}')
+            done
+          fi
+
+      # Step 7: Package Lambda function
       - name: Package Lambda function
         run: |
           cd backendServerless
           rm -rf node_modules
-          zip -r lambda.zip . -x "*.git*" "*.node_modules*" "*.test.*"
+          zip -r lambda.zip . -x "node_modules/*" "*.git*" "*.test.*"
 
       # Step 8: Deploy Lambda function
       - name: Deploy Lambda function
@@ -100,6 +109,8 @@ jobs:
               --region ap-south-1
 
             echo "Updating Lambda function configuration..."
+            RETRY_COUNT=0
+            MAX_RETRIES=10
             while true; do
               UPDATE_STATUS=$(aws lambda get-function-configuration --function-name VoiceRecorderFunction --query 'State' --output text)
               if [ "$UPDATE_STATUS" = "Active" ]; then
@@ -110,9 +121,13 @@ jobs:
                   --layers ${{ env.LAYER_VERSION_ARN }} \
                   --region ap-south-1
                 break
+              elif [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+                echo "Lambda function update timed out."
+                exit 1
               else
                 echo "Lambda function is still being updated, retrying in 8 seconds..."
                 sleep 8
+                RETRY_COUNT=$((RETRY_COUNT + 1))
               fi
             done
           fi
@@ -120,9 +135,10 @@ jobs:
       # Step 9: Set up API Gateway
       - name: Set up API Gateway
         run: |
+          STAGE_NAME="dev"
           REST_API_ID=$(aws apigateway get-rest-apis --query "items[?name=='VoiceRecorderAPI'].id" --output text --region ap-south-1)
 
-          if [ -z "$REST_API_ID" ]; then
+          if [ "$REST_API_ID" = "None" ] || [ -z "$REST_API_ID" ]; then
             echo "Creating new API Gateway..."
             REST_API_ID=$(aws apigateway create-rest-api --name "VoiceRecorderAPI" --query 'id' --output text --region ap-south-1)
           else
@@ -131,7 +147,6 @@ jobs:
 
           ROOT_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query 'items[?path==`/`].id' --output text --region ap-south-1)
 
-          # Create or fetch /audio resource
           AUDIO_RESOURCE_ID=$(aws apigateway get-resources \
             --rest-api-id $REST_API_ID \
             --query "items[?path=='/audio'].id" --output text --region ap-south-1)
@@ -143,8 +158,6 @@ jobs:
               --parent-id $ROOT_RESOURCE_ID \
               --path-part audio \
               --query 'id' --output text --region ap-south-1)
-          else
-            echo "/audio resource already exists with ID: $AUDIO_RESOURCE_ID"
           fi
 
           create_or_update_endpoint() {
@@ -154,27 +167,20 @@ jobs:
               --query "items[?path=='/audio/$ENDPOINT'].id" --output text --region ap-south-1)
 
             if [ -z "$ENDPOINT_RESOURCE_ID" ]; then
-              echo "Creating /audio/$ENDPOINT resource..."
               ENDPOINT_RESOURCE_ID=$(aws apigateway create-resource \
                 --rest-api-id $REST_API_ID \
                 --parent-id $AUDIO_RESOURCE_ID \
                 --path-part $ENDPOINT \
                 --query 'id' --output text --region ap-south-1)
-            else
-              echo "/audio/$ENDPOINT resource already exists with ID: $ENDPOINT_RESOURCE_ID"
             fi
 
-            # Check if POST method exists and configure/update
-            echo "Configuring POST method for /audio/$ENDPOINT..."
             aws apigateway put-method \
               --rest-api-id $REST_API_ID \
               --resource-id $ENDPOINT_RESOURCE_ID \
               --http-method POST \
               --authorization-type "NONE" \
-              --region ap-south-1 || echo "POST method already exists for /audio/$ENDPOINT, skipping creation."
+              --region ap-south-1 || true
 
-            # Attach or update integration
-            echo "Attaching Lambda function to /audio/$ENDPOINT POST method..."
             aws apigateway put-integration \
               --rest-api-id $REST_API_ID \
               --resource-id $ENDPOINT_RESOURCE_ID \
@@ -182,17 +188,15 @@ jobs:
               --type AWS_PROXY \
               --integration-http-method POST \
               --uri "arn:aws:apigateway:ap-south-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-south-1:${{ secrets.AWS_ACCOUNT_ID }}:function:VoiceRecorderFunction/invocations" \
-              --region ap-south-1 || echo "Integration already exists for /audio/$ENDPOINT."
+              --region ap-south-1 || true
 
-            # Enable CORS
-            echo "Enabling CORS for /audio/$ENDPOINT..."
             aws apigateway put-method-response \
               --rest-api-id $REST_API_ID \
               --resource-id $ENDPOINT_RESOURCE_ID \
               --http-method POST \
               --status-code 200 \
               --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":true}" \
-              --region ap-south-1 || echo "CORS already configured for /audio/$ENDPOINT."
+              --region ap-south-1 || true
 
             aws apigateway put-integration-response \
               --rest-api-id $REST_API_ID \
@@ -200,23 +204,20 @@ jobs:
               --http-method POST \
               --status-code 200 \
               --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":\"'*'\"}" \
-              --region ap-south-1 || echo "Integration response for CORS already exists for /audio/$ENDPOINT."
+              --region ap-south-1 || true
           }
 
-          # Create or update the endpoints
           create_or_update_endpoint "add"
           create_or_update_endpoint "list"
           create_or_update_endpoint "merge"
           create_or_update_endpoint "remove"
 
-          # Deploy the API
-          echo "Deploying API Gateway..."
           aws apigateway create-deployment \
             --rest-api-id $REST_API_ID \
-            --stage-name dev \
+            --stage-name $STAGE_NAME \
             --region ap-south-1
 
-          echo "API Gateway endpoint: https://${REST_API_ID}.execute-api.ap-south-1.amazonaws.com/dev/audio/"
+          echo "API Gateway endpoint: https://${REST_API_ID}.execute-api.ap-south-1.amazonaws.com/${STAGE_NAME}/audio/"
 
       # Step 10: Add API Gateway invoke permissions to Lambda function
       - name: Add invoke permission to Lambda
