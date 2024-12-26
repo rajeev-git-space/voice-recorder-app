@@ -203,3 +203,18 @@ jobs:
             --region ap-south-1
 
           echo "API Gateway endpoint: https://${REST_API_ID}.execute-api.ap-south-1.amazonaws.com/dev/audio/"
+
+      # Step 10: Add API Gateway invoke permissions to Lambda function
+      - name: Add API Gateway invoke permissions to Lambda function
+        run: |
+          REST_API_ID=$(aws apigateway get-rest-apis --query "items[?name=='VoiceRecorderAPI'].id" --output text --region ap-south-1)
+          LAMBDA_ARN="arn:aws:lambda:ap-south-1:${{ secrets.AWS_ACCOUNT_ID }}:function:VoiceRecorderFunction"
+
+          echo "Adding invoke permissions for API Gateway..."
+          aws lambda add-permission \
+            --function-name VoiceRecorderFunction \
+            --statement-id AllowApiGatewayInvoke \
+            --action lambda:InvokeFunction \
+            --principal apigateway.amazonaws.com \
+            --source-arn "arn:aws:execute-api:ap-south-1:${{ secrets.AWS_ACCOUNT_ID }}:${REST_API_ID}/*/POST/audio/*" \
+            --region ap-south-1 || echo "Permission already exists or was unable to add."
