@@ -115,37 +115,53 @@ jobs:
             echo "Using existing API Gateway: $REST_API_ID"
           fi
 
-          ROOT_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query 'items[0].id' --output text --region ap-south-1)
+          ROOT_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query 'items[?path==`/`].id' --output text --region ap-south-1)
 
-          AUDIO_RESOURCE_ID=$(aws apigateway create-resource \
+          # Create or fetch /audio resource
+          AUDIO_RESOURCE_ID=$(aws apigateway get-resources \
             --rest-api-id $REST_API_ID \
-            --parent-id $ROOT_RESOURCE_ID \
-            --path-part audio --query 'id' --output text --region ap-south-1 || \
-            aws apigateway get-resources \
-              --rest-api-id $REST_API_ID \
-              --query "items[?path=='/audio'].id" --output text --region ap-south-1)
+            --query "items[?path=='/audio'].id" --output text --region ap-south-1)
 
-          create_endpoint() {
+          if [ -z "$AUDIO_RESOURCE_ID" ]; then
+            echo "Creating /audio resource..."
+            AUDIO_RESOURCE_ID=$(aws apigateway create-resource \
+              --rest-api-id $REST_API_ID \
+              --parent-id $ROOT_RESOURCE_ID \
+              --path-part audio \
+              --query 'id' --output text --region ap-south-1)
+          else
+            echo "/audio resource already exists with ID: $AUDIO_RESOURCE_ID"
+          fi
+
+          create_or_update_endpoint() {
             ENDPOINT=$1
-            RESOURCE_ID=$(aws apigateway create-resource \
+            ENDPOINT_RESOURCE_ID=$(aws apigateway get-resources \
               --rest-api-id $REST_API_ID \
-              --parent-id $AUDIO_RESOURCE_ID \
-              --path-part $ENDPOINT \
-              --query 'id' --output text --region ap-south-1 || \
-              aws apigateway get-resources \
-                --rest-api-id $REST_API_ID \
-                --query "items[?path=='/audio/$ENDPOINT'].id" --output text --region ap-south-1)
+              --query "items[?path=='/audio/$ENDPOINT'].id" --output text --region ap-south-1)
 
+            if [ -z "$ENDPOINT_RESOURCE_ID" ]; then
+              echo "Creating /audio/$ENDPOINT resource..."
+              ENDPOINT_RESOURCE_ID=$(aws apigateway create-resource \
+                --rest-api-id $REST_API_ID \
+                --parent-id $AUDIO_RESOURCE_ID \
+                --path-part $ENDPOINT \
+                --query 'id' --output text --region ap-south-1)
+            else
+              echo "/audio/$ENDPOINT resource already exists with ID: $ENDPOINT_RESOURCE_ID"
+            fi
+
+            # Attach POST method to the resource
             aws apigateway put-method \
               --rest-api-id $REST_API_ID \
-              --resource-id $RESOURCE_ID \
+              --resource-id $ENDPOINT_RESOURCE_ID \
               --http-method POST \
               --authorization-type "NONE" \
               --region ap-south-1
 
+            # Attach integration to the Lambda function
             aws apigateway put-integration \
               --rest-api-id $REST_API_ID \
-              --resource-id $RESOURCE_ID \
+              --resource-id $ENDPOINT_RESOURCE_ID \
               --http-method POST \
               --type AWS_PROXY \
               --integration-http-method POST \
@@ -153,14 +169,17 @@ jobs:
               --region ap-south-1
           }
 
-          create_endpoint "add"
-          create_endpoint "list"
-          create_endpoint "merge"
-          create_endpoint "remove"
+          # Create or update the endpoints
+          create_or_update_endpoint "add"
+          create_or_update_endpoint "list"
+          create_or_update_endpoint "merge"
+          create_or_update_endpoint "remove"
 
+          # Deploy the API
           aws apigateway create-deployment \
             --rest-api-id $REST_API_ID \
             --stage-name dev \
             --region ap-south-1
 
           echo "API Gateway endpoint: https://${REST_API_ID}.execute-api.ap-south-1.amazonaws.com/dev/audio/"
+
