@@ -1,5 +1,6 @@
-const AWS = require('aws-sdk');
-const S3 = new AWS.S3();
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+
+const s3 = new S3Client({ region: 'ap-south-1' }); // Specify your AWS region
 
 module.exports = async (event) => {
     const { chunk_uuid, blob_data } = JSON.parse(event.body);
@@ -16,12 +17,16 @@ module.exports = async (event) => {
 
     try {
         const buffer = Buffer.from(blob_data, 'base64');
-        await S3.putObject({
+
+        // Use the PutObjectCommand to upload the file
+        const command = new PutObjectCommand({
             Bucket: bucketName,
             Key: key,
             Body: buffer,
             ContentType: 'audio/webm',
-        }).promise();
+        });
+
+        await s3.send(command);
 
         return {
             statusCode: 200,

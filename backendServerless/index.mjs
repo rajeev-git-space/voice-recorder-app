@@ -1,6 +1,6 @@
-const addAudio = require('./helpers/addAudio');
-const mergeAudio = require('./helpers/mergeAudio');
-const retrieveAudio = require('./helpers/retrieveAudio');
+const addAudio = require('./helpers/addAudio.mjs');
+const mergeAudio = require('./helpers/mergeAudio.mjs');
+const retrieveAudio = require('./helpers/retrieveAudio.mjs');
 
 exports.handler = async (event) => {
     console.log(event);
