@@ -1,5 +1,4 @@
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
-
+import { S3Client, PutObjectCommand } from "aws-sdk/clients/s3";
 const s3 = new S3Client({ region: 'ap-south-1' }); // Specify your AWS region
 
 module.exports = async (event) => {
