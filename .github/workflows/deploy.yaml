@@ -45,7 +45,7 @@ jobs:
           aws lambda create-function \
             --function-name VoiceRecorderFunction \
             --runtime nodejs18.x \
-            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_LAMBDA_ROLE }} \
+            --role arn:aws:iam::478155242465:role/${{ secrets.AWS_LAMBDA_ROLE }} \
             --handler index.handler \
             --zip-file fileb://backendServerless/lambda.zip || \
           aws lambda update-function-code \
@@ -78,7 +78,7 @@ jobs:
             --http-method POST \
             --type AWS_PROXY \
             --integration-http-method POST \
-            --uri "arn:aws:apigateway:ap-south-1:${{ secrets.AWS_ACCOUNT_ID }}:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-south-1:${{ secrets.AWS_ACCOUNT_ID }}:function:VoiceRecorderFunction/invocations" \
+            --uri "arn:aws:apigateway:ap-south-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-south-1:478155242465:function:VoiceRecorderFunction/invocations" \
             --region ap-south-1
 
           # Deploy API
@@ -88,3 +88,4 @@ jobs:
             --region ap-south-1
 
           echo "API Gateway endpoint: https://${REST_API_ID}.execute-api.ap-south-1.amazonaws.com/dev/audio/add"
+

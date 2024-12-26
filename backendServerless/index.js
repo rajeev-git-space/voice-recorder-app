@@ -5,7 +5,7 @@ const retrieveAudio = require('./helpers/retrieveAudio');
 exports.handler = async (event) => {
     const path = event.path;
     let response;
-
+    console.log(event);
     try {
         switch (path) {
             case '/audio/add':
