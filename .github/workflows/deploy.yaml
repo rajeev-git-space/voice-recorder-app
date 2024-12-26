@@ -26,14 +26,37 @@ jobs:
           cd backendServerless
           npm install
 
-      # Step 4: Package Lambda function
+      # Step 4: Create Lambda Layer for uuid
+      - name: Create Lambda Layer for uuid
+        run: |
+          # Create the directory for the layer and install uuid
+          mkdir -p my-layer/nodejs
+          npm install uuid --prefix ./my-layer/nodejs
+          
+          # Zip the layer
+          cd my-layer
+          zip -r layer.zip nodejs
+
+      # Step 5: Publish Lambda Layer
+      - name: Publish Lambda Layer
+        run: |
+          LAYER_ARN=$(aws lambda publish-layer-version \
+            --layer-name uuid-layer \
+            --zip-file fileb://my-layer/layer.zip \
+            --compatible-runtimes nodejs18.x \
+            --query 'LayerVersionArn' --output text \
+            --region ap-south-1)
+          echo "Layer ARN: $LAYER_ARN"
+          echo "LAYER_ARN=$LAYER_ARN" >> $GITHUB_ENV
+
+      # Step 6: Package Lambda function
       - name: Package Lambda function
         run: |
           cd backendServerless
           zip -r lambda.zip .
 
-      # Step 5: Deploy Lambda function
-      - name: Configure AWS Credentials
+      # Step 7: Deploy Lambda function
+      - name: Deploy Lambda function
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -42,28 +65,35 @@ jobs:
 
       - name: Deploy Lambda
         run: |
+          # Deploy or update the Lambda function
           aws lambda create-function \
             --function-name VoiceRecorderFunction \
             --runtime nodejs18.x \
-            --role arn:aws:iam::478155242465:role/${{ secrets.AWS_LAMBDA_ROLE }} \
+            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_LAMBDA_ROLE }} \
             --handler index.handler \
             --zip-file fileb://backendServerless/lambda.zip || \
           aws lambda update-function-code \
             --function-name VoiceRecorderFunction \
             --zip-file fileb://backendServerless/lambda.zip
 
-      # Step 6: Set up API Gateway
+          # Attach the Lambda Layer
+          aws lambda update-function-configuration \
+            --function-name VoiceRecorderFunction \
+            --layers ${{ env.LAYER_ARN }} \
+            --region ap-south-1
+
+      # Step 8: Set up API Gateway
       - name: Set up API Gateway
         run: |
           # Create REST API
           REST_API_ID=$(aws apigateway create-rest-api --name "VoiceRecorderAPI" --query 'id' --output text --region ap-south-1)
-
+          
           # Get root resource ID
           ROOT_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query 'items[0].id' --output text --region ap-south-1)
-
+          
           # Create /audio resource
           AUDIO_RESOURCE_ID=$(aws apigateway create-resource --rest-api-id $REST_API_ID --parent-id $ROOT_RESOURCE_ID --path-part audio --query 'id' --output text --region ap-south-1)
-
+          
           # Create POST /audio/add
           aws apigateway put-method \
             --rest-api-id $REST_API_ID \
@@ -71,21 +101,20 @@ jobs:
             --http-method POST \
             --authorization-type "NONE" \
             --region ap-south-1
-
+          
           aws apigateway put-integration \
             --rest-api-id $REST_API_ID \
             --resource-id $AUDIO_RESOURCE_ID \
             --http-method POST \
             --type AWS_PROXY \
             --integration-http-method POST \
-            --uri "arn:aws:apigateway:ap-south-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-south-1:478155242465:function:VoiceRecorderFunction/invocations" \
+            --uri "arn:aws:apigateway:ap-south-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-south-1:${{ secrets.AWS_ACCOUNT_ID }}:function:VoiceRecorderFunction/invocations" \
             --region ap-south-1
-
+          
           # Deploy API
           aws apigateway create-deployment \
             --rest-api-id $REST_API_ID \
             --stage-name dev \
             --region ap-south-1
-
+          
           echo "API Gateway endpoint: https://${REST_API_ID}.execute-api.ap-south-1.amazonaws.com/dev/audio/add"
-
