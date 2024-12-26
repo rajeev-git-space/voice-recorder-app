@@ -1,4 +1,4 @@
-name: Deploy to AWS Lambda
+name: Deploy Voice Recorder Backend
 
 on:
   push:
@@ -10,9 +10,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      # Step 1: Check out the repository
+      - name: Checkout code
         uses: actions/checkout@v3
 
+      # Step 2: Set up Node.js environment
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        run: |
+          cd backendServerless
+          npm install
+
+      # Step 4: Package Lambda function
+      - name: Package Lambda function
+        run: |
+          cd backendServerless
+          zip -r lambda.zip .
+
+      # Step 5: Deploy Lambda function
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -20,73 +40,51 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
 
-      - name: Install Dependencies
-        working-directory: backend
-        run: npm install
-
-      - name: Package Lambda Function
-        working-directory: backend
+      - name: Deploy Lambda
         run: |
-          zip -r ../lambda_function.zip .
+          aws lambda create-function \
+            --function-name VoiceRecorderFunction \
+            --runtime nodejs18.x \
+            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_LAMBDA_ROLE }} \
+            --handler index.handler \
+            --zip-file fileb://backendServerless/lambda.zip || \
+          aws lambda update-function-code \
+            --function-name VoiceRecorderFunction \
+            --zip-file fileb://backendServerless/lambda.zip
 
-      - name: Deploy Lambda Function
+      # Step 6: Set up API Gateway
+      - name: Set up API Gateway
         run: |
-          if aws lambda get-function --function-name VoiceRecorderAPI; then
-            aws lambda update-function-code \
-              --function-name VoiceRecorderAPI \
-              --zip-file fileb://lambda_function.zip
-          else
-            aws lambda create-function \
-              --function-name VoiceRecorderAPI \
-              --runtime nodejs18.x \
-              --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_LAMBDA_ROLE }} \
-              --handler src/index.handler \
-              --zip-file fileb://lambda_function.zip
-          fi
+          # Create REST API
+          REST_API_ID=$(aws apigateway create-rest-api --name "VoiceRecorderAPI" --query 'id' --output text --region ap-south-1)
 
-      - name: Create API Gateway Resources and Methods
-        run: |
-          # Create the API Gateway REST API
-          api_gateway_id=$(aws apigateway create-rest-api --name "VoiceRecorderAPI" --query 'id' --output text)
+          # Get root resource ID
+          ROOT_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query 'items[0].id' --output text --region ap-south-1)
 
-          # Get the root resource ID
-          root_resource_id=$(aws apigateway get-resources --rest-api-id $api_gateway_id --query 'items[0].id' --output text)
+          # Create /audio resource
+          AUDIO_RESOURCE_ID=$(aws apigateway create-resource --rest-api-id $REST_API_ID --parent-id $ROOT_RESOURCE_ID --path-part audio --query 'id' --output text --region ap-south-1)
 
-          # Create a 'audio' resource under root
-          audio_resource_id=$(aws apigateway create-resource \
-            --rest-api-id $api_gateway_id \
-            --parent-id $root_resource_id \
-            --path-part audio \
-            --query 'id' --output text)
-
-          # Add POST method for 'audio'
+          # Create POST /audio/add
           aws apigateway put-method \
-            --rest-api-id $api_gateway_id \
-            --resource-id $audio_resource_id \
+            --rest-api-id $REST_API_ID \
+            --resource-id $AUDIO_RESOURCE_ID \
             --http-method POST \
-            --authorization-type "NONE"
+            --authorization-type "NONE" \
+            --region ap-south-1
 
-          # Integrate POST with Lambda
           aws apigateway put-integration \
-            --rest-api-id $api_gateway_id \
-            --resource-id $audio_resource_id \
+            --rest-api-id $REST_API_ID \
+            --resource-id $AUDIO_RESOURCE_ID \
             --http-method POST \
             --type AWS_PROXY \
             --integration-http-method POST \
-            --uri "arn:aws:apigateway:${{ secrets.AWS_REGION }}:lambda:path/2015-03-31/functions/arn:aws:lambda:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:function:VoiceRecorderApp/invocations"
+            --uri "arn:aws:apigateway:ap-south-1:${{ secrets.AWS_ACCOUNT_ID }}:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-south-1:${{ secrets.AWS_ACCOUNT_ID }}:function:VoiceRecorderFunction/invocations" \
+            --region ap-south-1
 
-          # Deploy the API
+          # Deploy API
           aws apigateway create-deployment \
-            --rest-api-id $api_gateway_id \
-            --stage-name qa
+            --rest-api-id $REST_API_ID \
+            --stage-name dev \
+            --region ap-south-1
 
-          echo "API Gateway URL: https://${api_gateway_id}.execute-api.${{ secrets.AWS_REGION }}.amazonaws.com/qa/audio"
-
-      - name: Add Permissions to Lambda
-        run: |
-          aws lambda add-permission \
-            --function-name VoiceRecorderApp \
-            --statement-id apigateway-post \
-            --action lambda:InvokeFunction \
-            --principal apigateway.amazonaws.com \
-            --source-arn "arn:aws:execute-api:${{ secrets.AWS_REGION }}:${{ secrets.AWS_ACCOUNT_ID }}:${api_gateway_id}/*/POST/audio"
+          echo "API Gateway endpoint: https://${REST_API_ID}.execute-api.ap-south-1.amazonaws.com/dev/audio/add"
