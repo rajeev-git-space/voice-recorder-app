@@ -20,8 +20,8 @@ jobs:
         with:
           node-version: '18'
 
-      # Step 3: Install dependencies
-      - name: Install dependencies
+      # Step 3: Install dependencies for local testing (optional, not for deployment)
+      - name: Install dependencies locally
         run: |
           cd backendServerless
           npm install
@@ -54,11 +54,12 @@ jobs:
           echo "Layer ARN: $LAYER_ARN"
           echo "LAYER_ARN=$LAYER_ARN" >> $GITHUB_ENV
 
-      # Step 7: Package Lambda function
+      # Step 7: Package Lambda function without node_modules
       - name: Package Lambda function
         run: |
           cd backendServerless
-          zip -r lambda.zip .
+          rm -rf node_modules
+          zip -r lambda.zip . -x "*.git*" "*.node_modules*" "*.test.*"
 
       # Step 8: Deploy Lambda function
       - name: Deploy Lambda function
@@ -75,7 +76,8 @@ jobs:
               --zip-file fileb://backendServerless/lambda.zip \
               --timeout 6 \
               --memory-size 512 \
-              --region ap-south-1
+              --region ap-south-1 \
+              --package-type Zip
           else
             echo "Updating Lambda function code..."
             aws lambda update-function-code \
@@ -95,8 +97,8 @@ jobs:
                   --region ap-south-1
                 break
               else
-                echo "Lambda function is still being updated, retrying in 10 seconds..."
-                sleep 10
+                echo "Lambda function is still being updated, retrying in 8 seconds..."
+                sleep 8
               fi
             done
           fi
