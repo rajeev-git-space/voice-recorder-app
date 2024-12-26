@@ -150,15 +150,17 @@ jobs:
               echo "/audio/$ENDPOINT resource already exists with ID: $ENDPOINT_RESOURCE_ID"
             fi
 
-            # Attach POST method to the resource
+            # Check if POST method exists and configure/update
+            echo "Configuring POST method for /audio/$ENDPOINT..."
             aws apigateway put-method \
               --rest-api-id $REST_API_ID \
               --resource-id $ENDPOINT_RESOURCE_ID \
               --http-method POST \
               --authorization-type "NONE" \
-              --region ap-south-1
+              --region ap-south-1 || echo "POST method already exists for /audio/$ENDPOINT, skipping creation."
 
-            # Attach integration to the Lambda function
+            # Attach or update integration
+            echo "Attaching Lambda function to /audio/$ENDPOINT POST method..."
             aws apigateway put-integration \
               --rest-api-id $REST_API_ID \
               --resource-id $ENDPOINT_RESOURCE_ID \
@@ -166,7 +168,25 @@ jobs:
               --type AWS_PROXY \
               --integration-http-method POST \
               --uri "arn:aws:apigateway:ap-south-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-south-1:${{ secrets.AWS_ACCOUNT_ID }}:function:VoiceRecorderFunction/invocations" \
-              --region ap-south-1
+              --region ap-south-1 || echo "Integration already exists for /audio/$ENDPOINT."
+
+            # Enable CORS
+            echo "Enabling CORS for /audio/$ENDPOINT..."
+            aws apigateway put-method-response \
+              --rest-api-id $REST_API_ID \
+              --resource-id $ENDPOINT_RESOURCE_ID \
+              --http-method POST \
+              --status-code 200 \
+              --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":true}" \
+              --region ap-south-1 || echo "CORS already configured for /audio/$ENDPOINT."
+
+            aws apigateway put-integration-response \
+              --rest-api-id $REST_API_ID \
+              --resource-id $ENDPOINT_RESOURCE_ID \
+              --http-method POST \
+              --status-code 200 \
+              --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":\"'*'\"}" \
+              --region ap-south-1 || echo "Integration response for CORS already exists for /audio/$ENDPOINT."
           }
 
           # Create or update the endpoints
@@ -176,10 +196,10 @@ jobs:
           create_or_update_endpoint "remove"
 
           # Deploy the API
+          echo "Deploying API Gateway..."
           aws apigateway create-deployment \
             --rest-api-id $REST_API_ID \
             --stage-name dev \
             --region ap-south-1
 
           echo "API Gateway endpoint: https://${REST_API_ID}.execute-api.ap-south-1.amazonaws.com/dev/audio/"
-
