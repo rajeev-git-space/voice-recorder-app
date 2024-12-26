@@ -3,9 +3,9 @@ const mergeAudio = require('./helpers/mergeAudio');
 const retrieveAudio = require('./helpers/retrieveAudio');
 
 exports.handler = async (event) => {
+    console.log(event);
     const path = event.path;
     let response;
-    console.log(event);
     try {
         switch (path) {
             case '/audio/add':
