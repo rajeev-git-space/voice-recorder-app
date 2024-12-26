@@ -2,7 +2,7 @@ import { addAudio } from "./helpers/addAudio.mjs";
 import { mergeAudio } from "./helpers/mergeAudio.mjs";
 import { retrieveAudio } from "./helpers/retrieveAudio.mjs";
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
     console.log(event);
     const path = event.path;
     let response;

@@ -1,7 +1,7 @@
-import { S3Client, PutObjectCommand } from "aws-sdk/clients/s3";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 const s3 = new S3Client({ region: 'ap-south-1' }); // Specify your AWS region
 
-module.exports = async (event) => {
+export const addAudio = async (event) => {
     const { chunk_uuid, blob_data } = JSON.parse(event.body);
 
     if (!chunk_uuid || !blob_data) {
