@@ -26,7 +26,15 @@ jobs:
           cd backendServerless
           npm install
 
-      # Step 4: Create Lambda Layer for uuid
+      # Step 4: Configure AWS credentials
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+
+      # Step 5: Create Lambda Layer for uuid
       - name: Create Lambda Layer for uuid
         run: |
           # Create the directory for the layer and install uuid
@@ -37,7 +45,7 @@ jobs:
           cd my-layer
           zip -r layer.zip nodejs
 
-      # Step 5: Publish Lambda Layer
+      # Step 6: Publish Lambda Layer
       - name: Publish Lambda Layer
         run: |
           LAYER_ARN=$(aws lambda publish-layer-version \
@@ -49,20 +57,13 @@ jobs:
           echo "Layer ARN: $LAYER_ARN"
           echo "LAYER_ARN=$LAYER_ARN" >> $GITHUB_ENV
 
-      # Step 6: Package Lambda function
+      # Step 7: Package Lambda function
       - name: Package Lambda function
         run: |
           cd backendServerless
           zip -r lambda.zip .
 
-      # Step 7: Deploy Lambda function
-      - name: Deploy Lambda function
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
-
+      # Step 8: Deploy Lambda function
       - name: Deploy Lambda
         run: |
           # Deploy or update the Lambda function
@@ -82,7 +83,7 @@ jobs:
             --layers ${{ env.LAYER_ARN }} \
             --region ap-south-1
 
-      # Step 8: Set up API Gateway
+      # Step 9: Set up API Gateway
       - name: Set up API Gateway
         run: |
           # Create REST API
