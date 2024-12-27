@@ -71,8 +71,12 @@ export const mergeAudio = async (event) => {
         }
 
         // Set paths for ffmpeg binary and output file
-        const ffmpegPath = join(__dirname, 'ffmpeg'); // Reference the included binary
+        const ffmpegPath = process.env.FFMPEG_PATH || '/opt/ffmpeg/bin/ffmpeg'; // Referencing Lambda Layer
         const outputFilePath = `/tmp/${recording_name}.webm`;
+
+        if (!fs.existsSync(ffmpegPath)) {
+            throw new Error(`FFmpeg binary not found at ${ffmpegPath}`);
+        }
 
         // Merge audio using ffmpeg
         await new Promise((resolve, reject) => {

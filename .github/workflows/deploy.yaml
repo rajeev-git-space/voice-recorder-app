@@ -20,68 +20,75 @@ jobs:
         with:
           node-version: '18'
 
-      # Step 3: Install dependencies for local testing (optional, not for deployment)
-      - name: Install dependencies locally
+      # Step 3: Create Lambda Layer for FFmpeg
+      - name: Create FFmpeg Lambda Layer
         run: |
-          cd backendServerless
-          npm install
+          LAYER_DIR="ffmpeg-layer"
+          mkdir -p $LAYER_DIR/bin
+          curl -L -o $LAYER_DIR/bin/ffmpeg https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+          tar -xf $LAYER_DIR/bin/ffmpeg-release-amd64-static.tar.xz -C $LAYER_DIR/bin --strip-components=1
+          chmod +x $LAYER_DIR/bin/ffmpeg
 
-      # Step 4: Create Lambda Layer for Dependencies
-      - name: Create Lambda Layer for Dependencies
-        run: |
-          # Define the layer directory
-          LAYER_DIR="lambda-layer"
-          mkdir -p $LAYER_DIR/nodejs
-
-          # Install required packages in the nodejs folder
-          npm install joi ffmpeg fluent-ffmpeg stream --prefix $LAYER_DIR/nodejs
-
-          # Zip the layer
+          # Zip the FFmpeg layer
           cd $LAYER_DIR
-          zip -r layer.zip nodejs
+          zip -r layer.zip bin
+          rm $LAYER_DIR/bin/ffmpeg-release-amd64-static.tar.xz
           cd ..
 
-      # Step 5: Configure AWS credentials
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-south-1
-
-      # Step 6: Publish Lambda Layer
-      - name: Publish Lambda Layer
+      # Step 4: Publish FFmpeg Layer
+      - name: Publish FFmpeg Layer
         run: |
-          echo "Publishing or reusing Lambda Layer..."
-          LAYER_NAME="VoiceRecorderDependenciesLayer"
+          echo "Publishing FFmpeg Layer..."
+          FFMPEG_LAYER_NAME="FFmpegLayer"
           REGION="ap-south-1"
 
-          # Publish the layer to AWS Lambda
-          LAYER_VERSION_ARN=$(aws lambda publish-layer-version \
-            --layer-name $LAYER_NAME \
-            --description "Dependencies for Voice Recorder App" \
-            --zip-file fileb://lambda-layer/layer.zip \
+          FFMPEG_LAYER_VERSION_ARN=$(aws lambda publish-layer-version \
+            --layer-name $FFMPEG_LAYER_NAME \
+            --description "FFmpeg Binary Layer" \
+            --zip-file fileb://ffmpeg-layer/layer.zip \
             --compatible-runtimes nodejs16.x nodejs18.x \
             --region $REGION \
             --query 'LayerVersionArn' --output text)
 
-          echo "Layer published: $LAYER_VERSION_ARN"
-          echo "LAYER_VERSION_ARN=$LAYER_VERSION_ARN" >> $GITHUB_ENV
+          echo "FFmpeg Layer published: $FFMPEG_LAYER_VERSION_ARN"
+          echo "FFMPEG_LAYER_VERSION_ARN=$FFMPEG_LAYER_VERSION_ARN" >> $GITHUB_ENV
 
-          # Cleanup old layers if necessary
-          OLD_LAYERS=$(aws lambda list-layer-versions --layer-name $LAYER_NAME --query 'LayerVersions[1:].LayerVersionArn' --output text)
-          if [ -n "$OLD_LAYERS" ]; then
-            echo "Cleaning up old Lambda layers..."
-            for ARN in $OLD_LAYERS; do
-              aws lambda delete-layer-version --layer-name $LAYER_NAME --version-number $(echo $ARN | awk -F':' '{print $NF}')
-            done
-          fi
+      # Step 5: Create Lambda Layer for Other Dependencies
+      - name: Create Dependencies Lambda Layer
+        run: |
+          LAYER_DIR="dependencies-layer"
+          mkdir -p $LAYER_DIR/nodejs
+
+          # Install other dependencies
+          npm install joi child_process fs url path stream --prefix $LAYER_DIR/nodejs
+
+          # Zip the dependencies layer
+          cd $LAYER_DIR
+          zip -r layer.zip nodejs
+          cd ..
+
+      # Step 6: Publish Dependencies Layer
+      - name: Publish Dependencies Layer
+        run: |
+          echo "Publishing Dependencies Layer..."
+          DEPENDENCIES_LAYER_NAME="DependenciesLayer"
+          REGION="ap-south-1"
+
+          DEPENDENCIES_LAYER_VERSION_ARN=$(aws lambda publish-layer-version \
+            --layer-name $DEPENDENCIES_LAYER_NAME \
+            --description "Other Dependencies Layer" \
+            --zip-file fileb://dependencies-layer/layer.zip \
+            --compatible-runtimes nodejs16.x nodejs18.x \
+            --region $REGION \
+            --query 'LayerVersionArn' --output text)
+
+          echo "Dependencies Layer published: $DEPENDENCIES_LAYER_VERSION_ARN"
+          echo "DEPENDENCIES_LAYER_VERSION_ARN=$DEPENDENCIES_LAYER_VERSION_ARN" >> $GITHUB_ENV
 
       # Step 7: Package Lambda function
       - name: Package Lambda function
         run: |
           cd backendServerless
-          rm -rf node_modules
           zip -r lambda.zip . -x "node_modules/*" "*.git*" "*.test.*"
 
       # Step 8: Deploy Lambda function
@@ -109,27 +116,12 @@ jobs:
               --region ap-south-1
 
             echo "Updating Lambda function configuration..."
-            RETRY_COUNT=0
-            MAX_RETRIES=10
-            while true; do
-              UPDATE_STATUS=$(aws lambda get-function-configuration --function-name VoiceRecorderFunction --query 'State' --output text)
-              if [ "$UPDATE_STATUS" = "Active" ]; then
-                aws lambda update-function-configuration \
-                  --function-name VoiceRecorderFunction \
-                  --timeout 6 \
-                  --memory-size 512 \
-                  --layers ${{ env.LAYER_VERSION_ARN }} \
-                  --region ap-south-1
-                break
-              elif [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
-                echo "Lambda function update timed out."
-                exit 1
-              else
-                echo "Lambda function is still being updated, retrying in 8 seconds..."
-                sleep 8
-                RETRY_COUNT=$((RETRY_COUNT + 1))
-              fi
-            done
+            aws lambda update-function-configuration \
+              --function-name VoiceRecorderFunction \
+              --timeout 6 \
+              --memory-size 512 \
+              --layers ${{ env.FFMPEG_LAYER_VERSION_ARN }} ${{ env.DEPENDENCIES_LAYER_VERSION_ARN }} \
+              --region ap-south-1
           fi
 
       # Step 9: Set up API Gateway
