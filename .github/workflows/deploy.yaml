@@ -26,31 +26,26 @@ jobs:
           LAYER_DIR="ffmpeg-layer"
           mkdir -p $LAYER_DIR/bin
 
-          # Download FFmpeg and extract only the binary
+          # Download FFmpeg binary
           curl -L -o ffmpeg-release-amd64-static.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
           tar -xf ffmpeg-release-amd64-static.tar.xz --strip-components=1 -C $LAYER_DIR/bin
           
-          # Remove unnecessary files (optional, if you can identify them)
+          # Ensure only the ffmpeg binary is present
           find $LAYER_DIR/bin -type f ! -name 'ffmpeg' -delete
           
-          # Strip unnecessary debug symbols and reduce binary size further
-          strip --strip-all $LAYER_DIR/bin/ffmpeg
-          
-          # Ensure the ffmpeg binary exists
-          if [ ! -f $LAYER_DIR/bin/ffmpeg ]; then
-            echo "ffmpeg binary not found!"
-            exit 1
-          fi
-
           # Make the binary executable
           chmod +x $LAYER_DIR/bin/ffmpeg
 
-          # Zip the FFmpeg layer (keep it small)
+          # Validate ffmpeg binary exists
+          if [ ! -f $LAYER_DIR/bin/ffmpeg ]; then
+            echo "FFmpeg binary not found in the layer!"
+            exit 1
+          fi
+
+          # Zip the FFmpeg layer
           cd $LAYER_DIR
           zip -r layer.zip bin
           cd ..
-
-
 
       # Step 4: Create Lambda Layer for Other Dependencies
       - name: Create Dependencies Lambda Layer
@@ -59,7 +54,7 @@ jobs:
           mkdir -p $LAYER_DIR/nodejs
 
           # Install other dependencies
-          npm install joi child_process fs url path stream --prefix $LAYER_DIR/nodejs
+          npm install joi fs url path child_process stream --prefix $LAYER_DIR/nodejs
 
           # Zip the dependencies layer
           cd $LAYER_DIR
