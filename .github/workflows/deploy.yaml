@@ -30,25 +30,26 @@ jobs:
           curl -L -o ffmpeg-release-amd64-static.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
           tar -xf ffmpeg-release-amd64-static.tar.xz --strip-components=1 -C $LAYER_DIR/bin
           
-          # Debug extracted files
-          ls -l $LAYER_DIR/bin
-
+          # Remove unnecessary files (optional, if you can identify them)
+          find $LAYER_DIR/bin -type f ! -name 'ffmpeg' -delete
+          
+          # Strip unnecessary debug symbols and reduce binary size further
+          strip --strip-all $LAYER_DIR/bin/ffmpeg
+          
           # Ensure the ffmpeg binary exists
           if [ ! -f $LAYER_DIR/bin/ffmpeg ]; then
             echo "ffmpeg binary not found!"
             exit 1
           fi
 
-          # Reduce binary size
-          strip --strip-unneeded $LAYER_DIR/bin/ffmpeg
-          
           # Make the binary executable
           chmod +x $LAYER_DIR/bin/ffmpeg
 
-          # Zip the FFmpeg layer
+          # Zip the FFmpeg layer (keep it small)
           cd $LAYER_DIR
           zip -r layer.zip bin
           cd ..
+
 
 
       # Step 4: Create Lambda Layer for Other Dependencies
