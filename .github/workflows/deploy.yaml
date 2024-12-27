@@ -32,7 +32,6 @@ jobs:
           # Zip the FFmpeg layer
           cd $LAYER_DIR
           zip -r layer.zip bin
-          rm $LAYER_DIR/bin/ffmpeg-release-amd64-static.tar.xz
           cd ..
 
       # Step 4: Publish FFmpeg Layer
