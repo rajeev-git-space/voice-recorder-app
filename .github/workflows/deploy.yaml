@@ -25,11 +25,20 @@ jobs:
         run: |
           LAYER_DIR="ffmpeg-layer"
           mkdir -p $LAYER_DIR/bin
-          
+
           # Download FFmpeg and extract only the binary
           curl -L -o ffmpeg-release-amd64-static.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
-          tar -xf ffmpeg-release-amd64-static.tar.xz --wildcards --no-anchored 'ffmpeg' --strip-components=1 -C $LAYER_DIR/bin
+          tar -xf ffmpeg-release-amd64-static.tar.xz --strip-components=1 -C $LAYER_DIR/bin
           
+          # Debug extracted files
+          ls -l $LAYER_DIR/bin
+
+          # Ensure the ffmpeg binary exists
+          if [ ! -f $LAYER_DIR/bin/ffmpeg ]; then
+            echo "ffmpeg binary not found!"
+            exit 1
+          fi
+
           # Reduce binary size
           strip --strip-unneeded $LAYER_DIR/bin/ffmpeg
           
@@ -40,6 +49,7 @@ jobs:
           cd $LAYER_DIR
           zip -r layer.zip bin
           cd ..
+
 
       # Step 4: Create Lambda Layer for Other Dependencies
       - name: Create Dependencies Lambda Layer
