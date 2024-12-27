@@ -26,11 +26,14 @@ jobs:
           LAYER_DIR="ffmpeg-layer"
           mkdir -p $LAYER_DIR/bin
           
-          # Download and extract the FFmpeg static binary
+          # Download FFmpeg and extract only the binary
           curl -L -o ffmpeg-release-amd64-static.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
-          tar -xf ffmpeg-release-amd64-static.tar.xz --strip-components=1 -C $LAYER_DIR/bin
+          tar -xf ffmpeg-release-amd64-static.tar.xz --wildcards --no-anchored 'ffmpeg' --strip-components=1 -C $LAYER_DIR/bin
           
-          # Make the FFmpeg binary executable
+          # Reduce binary size
+          strip --strip-unneeded $LAYER_DIR/bin/ffmpeg
+          
+          # Make the binary executable
           chmod +x $LAYER_DIR/bin/ffmpeg
 
           # Zip the FFmpeg layer
