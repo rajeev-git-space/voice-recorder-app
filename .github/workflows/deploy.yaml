@@ -38,7 +38,29 @@ jobs:
           zip -r layer.zip bin
           cd ..
 
-      # Step 4: Publish FFmpeg Layer
+      # Step 4: Create Lambda Layer for Other Dependencies
+      - name: Create Dependencies Lambda Layer
+        run: |
+          LAYER_DIR="dependencies-layer"
+          mkdir -p $LAYER_DIR/nodejs
+
+          # Install other dependencies
+          npm install joi child_process fs url path stream --prefix $LAYER_DIR/nodejs
+
+          # Zip the dependencies layer
+          cd $LAYER_DIR
+          zip -r layer.zip nodejs
+          cd ..
+
+      # Step 5: Configure AWS credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+      
+      # Step 6: Publish FFmpeg Layer
       - name: Publish FFmpeg Layer
         run: |
           echo "Publishing FFmpeg Layer..."
@@ -56,21 +78,7 @@ jobs:
           echo "FFmpeg Layer published: $FFMPEG_LAYER_VERSION_ARN"
           echo "FFMPEG_LAYER_VERSION_ARN=$FFMPEG_LAYER_VERSION_ARN" >> $GITHUB_ENV
 
-      # Step 5: Create Lambda Layer for Other Dependencies
-      - name: Create Dependencies Lambda Layer
-        run: |
-          LAYER_DIR="dependencies-layer"
-          mkdir -p $LAYER_DIR/nodejs
-
-          # Install other dependencies
-          npm install joi child_process fs url path stream --prefix $LAYER_DIR/nodejs
-
-          # Zip the dependencies layer
-          cd $LAYER_DIR
-          zip -r layer.zip nodejs
-          cd ..
-
-      # Step 6: Publish Dependencies Layer
+      # Step 7: Publish Dependencies Layer
       - name: Publish Dependencies Layer
         run: |
           echo "Publishing Dependencies Layer..."
@@ -88,13 +96,13 @@ jobs:
           echo "Dependencies Layer published: $DEPENDENCIES_LAYER_VERSION_ARN"
           echo "DEPENDENCIES_LAYER_VERSION_ARN=$DEPENDENCIES_LAYER_VERSION_ARN" >> $GITHUB_ENV
 
-      # Step 7: Package Lambda function
+      # Step 8: Package Lambda function
       - name: Package Lambda function
         run: |
           cd backendServerless
           zip -r lambda.zip . -x "node_modules/*" "*.git*" "*.test.*"
 
-      # Step 8: Deploy Lambda function
+      # Step 9: Deploy Lambda function
       - name: Deploy Lambda function
         run: |
           FUNCTION_EXISTS=$(aws lambda get-function --function-name VoiceRecorderFunction --query 'Configuration.FunctionName' --output text || echo "NOT_FOUND")
@@ -127,7 +135,7 @@ jobs:
               --region ap-south-1
           fi
 
-      # Step 9: Set up API Gateway
+      # Step 10: Set up API Gateway
       - name: Set up API Gateway
         run: |
           STAGE_NAME="dev"
@@ -214,7 +222,7 @@ jobs:
 
           echo "API Gateway endpoint: https://${REST_API_ID}.execute-api.ap-south-1.amazonaws.com/${STAGE_NAME}/audio/"
 
-      # Step 10: Add API Gateway invoke permissions to Lambda function
+      # Step 11: Add API Gateway invoke permissions to Lambda function
       - name: Add invoke permission to Lambda
         run: |
           echo "Adding invoke permissions for API Gateway..."
