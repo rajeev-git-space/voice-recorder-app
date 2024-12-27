@@ -1,9 +1,13 @@
 import { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { validateMergeAudio } from '../validations/audioValidations.mjs';
-// import { Readable } from 'stream';
-import { promises as fsPromises } from 'fs';
-// import { join } from 'path';
+import fs, { promises as fsPromises } from 'fs';
 import { exec } from 'child_process';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path'; // Fixed __dirname issue
+
+// Get the directory of the current file
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const s3 = new S3Client();
 
@@ -22,8 +26,8 @@ export const mergeAudio = async (event) => {
     const tempBucket = 'temporary-audio-chunks';
     const finalBucket = 'ec-voice-recorder-app';
 
-    // Check if `chunk_uuid` exists
     try {
+        // Fetch list of chunks
         const listResponse = await s3.send(
             new ListObjectsV2Command({ Bucket: tempBucket, Prefix: `${chunk_uuid}/` })
         );
@@ -35,7 +39,7 @@ export const mergeAudio = async (event) => {
             };
         }
 
-        // Check if `recording_name` is unique
+        // Check for unique recording name
         const nameCheck = await s3.send(
             new ListObjectsV2Command({ Bucket: finalBucket, Prefix: recording_name })
         );
@@ -47,7 +51,7 @@ export const mergeAudio = async (event) => {
             };
         }
 
-        // Download, merge, and upload
+        // Download chunks to /tmp directory
         const files = [];
         for (const item of listResponse.Contents) {
             const fileKey = item.Key;
@@ -56,7 +60,7 @@ export const mergeAudio = async (event) => {
             );
 
             const filePath = `/tmp/${fileKey.split('/').pop()}`;
-            const writeStream = fsPromises.createWriteStream(filePath);
+            const writeStream = fs.createWriteStream(filePath);
             getObjectResponse.Body.pipe(writeStream);
             files.push(filePath);
 
@@ -66,16 +70,23 @@ export const mergeAudio = async (event) => {
             });
         }
 
+        // Set paths for ffmpeg binary and output file
+        const ffmpegPath = join(__dirname, 'ffmpeg'); // Reference the included binary
         const outputFilePath = `/tmp/${recording_name}.webm`;
+
+        // Merge audio using ffmpeg
         await new Promise((resolve, reject) => {
-            exec(`ffmpeg -i "concat:${files.join('|')}" -c copy ${outputFilePath}`, (err) => {
-                if (err) reject(err);
-                else resolve();
-            });
+            exec(
+                `${ffmpegPath} -i "concat:${files.join('|')}" -c copy ${outputFilePath}`,
+                (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                }
+            );
         });
 
+        // Read the merged file and upload it to the final S3 bucket
         const fileContent = await fsPromises.readFile(outputFilePath);
-
         await s3.send(
             new PutObjectCommand({
                 Bucket: finalBucket,

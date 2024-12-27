@@ -34,7 +34,7 @@ jobs:
           mkdir -p $LAYER_DIR/nodejs
 
           # Install required packages in the nodejs folder
-          npm install joi fluent-ffmpeg stream --prefix $LAYER_DIR/nodejs
+          npm install joi ffmpeg fluent-ffmpeg stream --prefix $LAYER_DIR/nodejs
 
           # Zip the layer
           cd $LAYER_DIR
