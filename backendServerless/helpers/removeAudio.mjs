@@ -18,7 +18,7 @@ export const removeAudio = async (event) => {
     const bucketName = 'ec-voice-recorder-app';
 
     try {
-        await s3.send(new DeleteObjectCommand({ Bucket: bucketName, Key: recording_name }));
+        await s3.send(new DeleteObjectCommand({ Bucket: bucketName, Key: `merged-audio/${recording_name}.webm` }));
 
         return {
             statusCode: 200,

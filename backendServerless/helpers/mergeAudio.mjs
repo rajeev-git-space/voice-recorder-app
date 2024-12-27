@@ -30,10 +30,11 @@ export const mergeAudio = async (event) => {
                 body: JSON.stringify({ message: 'No audio chunks found for the given chunk_uuid.' }),
             };
         }
+        const mergedFilePath = `merged-audio/${recording_name}.webm`;
 
         // Check for unique recording name
         const nameCheck = await s3.send(
-            new ListObjectsV2Command({ Bucket: finalBucket, Prefix: recording_name })
+            new ListObjectsV2Command({ Bucket: finalBucket, Prefix: mergedFilePath })
         );
         
         if (nameCheck.Contents && nameCheck.Contents.length > 0) {
@@ -62,7 +63,7 @@ export const mergeAudio = async (event) => {
         await s3.send(
             new PutObjectCommand({
                 Bucket: finalBucket,
-                Key: recording_name,
+                Key: mergedFilePath,
                 Body: mergedBuffer,
                 ContentType: 'audio/webm',
             })

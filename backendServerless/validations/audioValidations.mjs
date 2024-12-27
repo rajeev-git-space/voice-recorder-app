@@ -16,11 +16,6 @@ export const validateMergeAudio = (input) => {
     return schema.validate(input);
 };
 
-// export const validateListAudio = () => {
-//     // No inputs for listing audio files.
-//     return { error: null };
-// };
-
 export const validateRemoveAudio = (input) => {
     const schema = Joi.object({
         recording_name: Joi.string().required(),

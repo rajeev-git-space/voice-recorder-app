@@ -1,25 +1,18 @@
 import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
-// import { validateListAudio } from '../validations/audioValidations.mjs';
 
 const s3 = new S3Client();
 
 export const retrieveAudio = async () => {
-    // const { error } = validateListAudio();
-
-    // if (error) {
-    //     return {
-    //         statusCode: 400,
-    //         body: JSON.stringify({ message: error.details[0].message }),
-    //     };
-    // }
 
     try {
         const bucketName = 'ec-voice-recorder-app';
-        const response = await s3.send(new ListObjectsV2Command({ Bucket: bucketName }));
-
+        const response = await s3.send(new ListObjectsV2Command({ Bucket: bucketName, Prefix: 'merged-audio/' }));
+        console.log('Response:', response);
         const files = response.Contents.map((item) => ({
             key: item.Key,
             url: `https://${bucketName}.s3.amazonaws.com/${item.Key}`,
+            lastModified: item.LastModified,
+            size: item.Size,
         }));
 
         return {
