@@ -20,32 +20,32 @@ jobs:
         with:
           node-version: '18'
 
-      # Step 3: Create Lambda Layer for FFmpeg
-      - name: Create FFmpeg Lambda Layer
-        run: |
-          LAYER_DIR="ffmpeg-layer"
-          mkdir -p $LAYER_DIR/bin
+      # # Step 3: Create Lambda Layer for FFmpeg
+      # - name: Create FFmpeg Lambda Layer
+      #   run: |
+      #     LAYER_DIR="ffmpeg-layer"
+      #     mkdir -p $LAYER_DIR/bin
 
-          # Download FFmpeg binary
-          curl -L -o ffmpeg-release-amd64-static.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
-          tar -xf ffmpeg-release-amd64-static.tar.xz --strip-components=1 -C $LAYER_DIR/bin
+      #     # Download FFmpeg binary
+      #     curl -L -o ffmpeg-release-amd64-static.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+      #     tar -xf ffmpeg-release-amd64-static.tar.xz --strip-components=1 -C $LAYER_DIR/bin
           
-          # Ensure only the ffmpeg binary is present
-          find $LAYER_DIR/bin -type f ! -name 'ffmpeg' -delete
+      #     # Ensure only the ffmpeg binary is present
+      #     find $LAYER_DIR/bin -type f ! -name 'ffmpeg' -delete
           
-          # Make the binary executable
-          chmod +x $LAYER_DIR/bin/ffmpeg
+      #     # Make the binary executable
+      #     chmod +x $LAYER_DIR/bin/ffmpeg
 
-          # Validate ffmpeg binary exists
-          if [ ! -f $LAYER_DIR/bin/ffmpeg ]; then
-            echo "FFmpeg binary not found in the layer!"
-            exit 1
-          fi
+      #     # Validate ffmpeg binary exists
+      #     if [ ! -f $LAYER_DIR/bin/ffmpeg ]; then
+      #       echo "FFmpeg binary not found in the layer!"
+      #       exit 1
+      #     fi
 
-          # Zip the FFmpeg layer
-          cd $LAYER_DIR
-          zip -r layer.zip bin
-          cd ..
+      #     # Zip the FFmpeg layer
+      #     cd $LAYER_DIR
+      #     zip -r layer.zip bin
+      #     cd ..
 
       # Step 4: Create Lambda Layer for Other Dependencies
       - name: Create Dependencies Lambda Layer
@@ -69,23 +69,23 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
       
-      # Step 6: Publish FFmpeg Layer
-      - name: Publish FFmpeg Layer
-        run: |
-          echo "Publishing FFmpeg Layer..."
-          FFMPEG_LAYER_NAME="FFmpegLayer"
-          REGION="ap-south-1"
+      # # Step 6: Publish FFmpeg Layer
+      # - name: Publish FFmpeg Layer
+      #   run: |
+      #     echo "Publishing FFmpeg Layer..."
+      #     FFMPEG_LAYER_NAME="FFmpegLayer"
+      #     REGION="ap-south-1"
 
-          FFMPEG_LAYER_VERSION_ARN=$(aws lambda publish-layer-version \
-            --layer-name $FFMPEG_LAYER_NAME \
-            --description "FFmpeg Binary Layer" \
-            --zip-file fileb://ffmpeg-layer/layer.zip \
-            --compatible-runtimes nodejs16.x nodejs18.x \
-            --region $REGION \
-            --query 'LayerVersionArn' --output text)
+      #     FFMPEG_LAYER_VERSION_ARN=$(aws lambda publish-layer-version \
+      #       --layer-name $FFMPEG_LAYER_NAME \
+      #       --description "FFmpeg Binary Layer" \
+      #       --zip-file fileb://ffmpeg-layer/layer.zip \
+      #       --compatible-runtimes nodejs16.x nodejs18.x \
+      #       --region $REGION \
+      #       --query 'LayerVersionArn' --output text)
 
-          echo "FFmpeg Layer published: $FFMPEG_LAYER_VERSION_ARN"
-          echo "FFMPEG_LAYER_VERSION_ARN=$FFMPEG_LAYER_VERSION_ARN" >> $GITHUB_ENV
+      #     echo "FFmpeg Layer published: $FFMPEG_LAYER_VERSION_ARN"
+      #     echo "FFMPEG_LAYER_VERSION_ARN=$FFMPEG_LAYER_VERSION_ARN" >> $GITHUB_ENV
 
       # Step 7: Publish Dependencies Layer
       - name: Publish Dependencies Layer

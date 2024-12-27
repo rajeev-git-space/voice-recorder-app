@@ -1,13 +1,5 @@
-import { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { validateMergeAudio } from '../validations/audioValidations.mjs';
-import fs, { promises as fsPromises } from 'fs';
-import { exec } from 'child_process';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path'; // Fixed __dirname issue
-
-// Get the directory of the current file
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 const s3 = new S3Client();
 
@@ -31,7 +23,7 @@ export const mergeAudio = async (event) => {
         const listResponse = await s3.send(
             new ListObjectsV2Command({ Bucket: tempBucket, Prefix: `${chunk_uuid}/` })
         );
-
+        console.log('List Response:', listResponse.Contents?.length);
         if (!listResponse.Contents || listResponse.Contents.length === 0) {
             return {
                 statusCode: 404,
@@ -43,7 +35,7 @@ export const mergeAudio = async (event) => {
         const nameCheck = await s3.send(
             new ListObjectsV2Command({ Bucket: finalBucket, Prefix: recording_name })
         );
-
+        
         if (nameCheck.Contents && nameCheck.Contents.length > 0) {
             return {
                 statusCode: 400,
@@ -51,63 +43,56 @@ export const mergeAudio = async (event) => {
             };
         }
 
-        // Download chunks to /tmp directory
-        const files = [];
+        // Download chunks
+        const chunks = [];
         for (const item of listResponse.Contents) {
             const fileKey = item.Key;
             const getObjectResponse = await s3.send(
                 new GetObjectCommand({ Bucket: tempBucket, Key: fileKey })
             );
 
-            const filePath = `/tmp/${fileKey.split('/').pop()}`;
-            const writeStream = fs.createWriteStream(filePath);
-            getObjectResponse.Body.pipe(writeStream);
-            files.push(filePath);
-
-            await new Promise((resolve, reject) => {
-                writeStream.on('finish', resolve);
-                writeStream.on('error', reject);
-            });
+            const data = await streamToBuffer(getObjectResponse.Body);
+            chunks.push(data);
         }
 
-        // Set paths for ffmpeg binary and output file
-        const ffmpegPath = process.env.FFMPEG_PATH || '/opt/ffmpeg/bin/ffmpeg'; // Referencing Lambda Layer
-        const outputFilePath = `/tmp/${recording_name}.webm`;
+        // Concatenate all audio chunks
+        const mergedBuffer = Buffer.concat(chunks);
 
-        if (!fs.existsSync(ffmpegPath)) {
-            throw new Error(`FFmpeg binary not found at ${ffmpegPath}`);
-        }
-
-        // Merge audio using ffmpeg
-        await new Promise((resolve, reject) => {
-            exec(
-                `${ffmpegPath} -i "concat:${files.join('|')}" -c copy ${outputFilePath}`,
-                (err) => {
-                    if (err) reject(err);
-                    else resolve();
-                }
-            );
-        });
-
-        // Read the merged file and upload it to the final S3 bucket
-        const fileContent = await fsPromises.readFile(outputFilePath);
+        // Upload merged file to the final S3 bucket
         await s3.send(
             new PutObjectCommand({
                 Bucket: finalBucket,
                 Key: recording_name,
-                Body: fileContent,
+                Body: mergedBuffer,
                 ContentType: 'audio/webm',
             })
         );
+
+        // Delete chunks from temporary bucket
+        const deleteTemporyChunks = { // DeleteObjectRequest
+            Bucket: tempBucket, // required
+            Key: chunk_uuid, // required
+        };
+        await s3.send(new DeleteObjectCommand(deleteTemporyChunks));
 
         return {
             statusCode: 200,
             body: JSON.stringify({ message: 'Audio merged and uploaded successfully.' }),
         };
     } catch (err) {
+        console.error('Error during merge operation:', err);
         return {
             statusCode: 500,
             body: JSON.stringify({ message: 'Error during merge operation.', error: err.message }),
         };
     }
+};
+
+// Utility function to convert a stream to a buffer
+const streamToBuffer = async (stream) => {
+    const chunks = [];
+    for await (const chunk of stream) {
+        chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
 };
