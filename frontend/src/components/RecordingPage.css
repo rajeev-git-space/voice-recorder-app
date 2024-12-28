@@ -222,22 +222,25 @@ button:hover:not(:disabled) {
 }
 
 /* Icon styles for actions */
-.play-icon {
-  color: #4caf50;
-  font-size: 18px;
+.action-icon {
   cursor: pointer;
-  margin-right: 10px;
+  margin-right: 8px;
 }
 
-.play-icon:hover {
-  color: #45a049;
+.action-icon.play {
+  color: blue;
 }
 
-.download-icon {
-  color: #2196f3;
-  font-size: 18px;
-  cursor: pointer;
-  margin-right: 10px;
+.action-icon.download {
+  color: green;
+}
+
+.action-icon.delete {
+  color: red;
+}
+
+.action-icon:hover {
+  opacity: 0.8; /* Optional hover effect */
 }
 
 .download-icon:hover {
