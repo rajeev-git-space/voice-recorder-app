@@ -1,0 +1,247 @@
+name: Deploy Voice Recorder Backend
+
+on:
+  push:
+    branches:
+      - qa
+    paths:
+      - 'backendServerless/**' # Trigger only when files in backendServerless are modified
+      - '.github/workflows/**' # Trigger only when files in .github/workflows are modified
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Check out the repository
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Node.js environment
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      # # Step 3: Create Lambda Layer for FFmpeg
+      # - name: Create FFmpeg Lambda Layer
+      #   run: |
+      #     LAYER_DIR="ffmpeg-layer"
+      #     mkdir -p $LAYER_DIR/bin
+
+      #     # Download FFmpeg binary
+      #     curl -L -o ffmpeg-release-amd64-static.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+      #     tar -xf ffmpeg-release-amd64-static.tar.xz --strip-components=1 -C $LAYER_DIR/bin
+          
+      #     # Ensure only the ffmpeg binary is present
+      #     find $LAYER_DIR/bin -type f ! -name 'ffmpeg' -delete
+          
+      #     # Make the binary executable
+      #     chmod +x $LAYER_DIR/bin/ffmpeg
+
+      #     # Validate ffmpeg binary exists
+      #     if [ ! -f $LAYER_DIR/bin/ffmpeg ]; then
+      #       echo "FFmpeg binary not found in the layer!"
+      #       exit 1
+      #     fi
+
+      #     # Zip the FFmpeg layer
+      #     cd $LAYER_DIR
+      #     zip -r layer.zip bin
+      #     cd ..
+
+      # Step 4: Create Lambda Layer for Other Dependencies
+      - name: Create Dependencies Lambda Layer
+        run: |
+          LAYER_DIR="dependencies-layer"
+          mkdir -p $LAYER_DIR/nodejs
+
+          # Install other dependencies
+          npm install joi fs url path child_process stream --prefix $LAYER_DIR/nodejs
+
+          # Zip the dependencies layer
+          cd $LAYER_DIR
+          zip -r layer.zip nodejs
+          cd ..
+
+      # Step 5: Configure AWS credentials
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+      
+      # # Step 6: Publish FFmpeg Layer
+      # - name: Publish FFmpeg Layer
+      #   run: |
+      #     echo "Publishing FFmpeg Layer..."
+      #     FFMPEG_LAYER_NAME="FFmpegLayer"
+      #     REGION="ap-south-1"
+
+      #     FFMPEG_LAYER_VERSION_ARN=$(aws lambda publish-layer-version \
+      #       --layer-name $FFMPEG_LAYER_NAME \
+      #       --description "FFmpeg Binary Layer" \
+      #       --zip-file fileb://ffmpeg-layer/layer.zip \
+      #       --compatible-runtimes nodejs16.x nodejs18.x \
+      #       --region $REGION \
+      #       --query 'LayerVersionArn' --output text)
+
+      #     echo "FFmpeg Layer published: $FFMPEG_LAYER_VERSION_ARN"
+      #     echo "FFMPEG_LAYER_VERSION_ARN=$FFMPEG_LAYER_VERSION_ARN" >> $GITHUB_ENV
+
+      # Step 7: Publish Dependencies Layer
+      - name: Publish Dependencies Layer
+        run: |
+          echo "Publishing Dependencies Layer..."
+          DEPENDENCIES_LAYER_NAME="DependenciesLayer"
+          REGION="ap-south-1"
+
+          DEPENDENCIES_LAYER_VERSION_ARN=$(aws lambda publish-layer-version \
+            --layer-name $DEPENDENCIES_LAYER_NAME \
+            --description "Other Dependencies Layer" \
+            --zip-file fileb://dependencies-layer/layer.zip \
+            --compatible-runtimes nodejs16.x nodejs18.x \
+            --region $REGION \
+            --query 'LayerVersionArn' --output text)
+
+          echo "Dependencies Layer published: $DEPENDENCIES_LAYER_VERSION_ARN"
+          echo "DEPENDENCIES_LAYER_VERSION_ARN=$DEPENDENCIES_LAYER_VERSION_ARN" >> $GITHUB_ENV
+
+      # Step 8: Package Lambda function
+      - name: Package Lambda function
+        run: |
+          cd backendServerless
+          zip -r lambda.zip . -x "node_modules/*" "*.git*" "*.test.*"
+
+      # Step 9: Deploy Lambda function
+      - name: Deploy Lambda function
+        run: |
+          FUNCTION_EXISTS=$(aws lambda get-function --function-name VoiceRecorderFunction --query 'Configuration.FunctionName' --output text || echo "NOT_FOUND")
+
+          if [ "$FUNCTION_EXISTS" = "NOT_FOUND" ]; then
+            echo "Creating Lambda function..."
+            aws lambda create-function \
+              --function-name VoiceRecorderFunction \
+              --runtime nodejs18.x \
+              --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_LAMBDA_ROLE }} \
+              --handler index.handler \
+              --zip-file fileb://backendServerless/lambda.zip \
+              --timeout 6 \
+              --memory-size 512 \
+              --region ap-south-1 \
+              --package-type Zip
+          else
+            echo "Updating Lambda function code..."
+            aws lambda update-function-code \
+              --function-name VoiceRecorderFunction \
+              --zip-file fileb://backendServerless/lambda.zip \
+              --region ap-south-1
+
+            echo "Updating Lambda function configuration..."
+            aws lambda update-function-configuration \
+              --function-name VoiceRecorderFunction \
+              --timeout 15 \
+              --memory-size 1024 \
+              --layers ${{ env.FFMPEG_LAYER_VERSION_ARN }} ${{ env.DEPENDENCIES_LAYER_VERSION_ARN }} \
+              --region ap-south-1
+          fi
+
+      # Step 10: Set up API Gateway
+      - name: Set up API Gateway
+        run: |
+          STAGE_NAME="dev"
+          REST_API_ID=$(aws apigateway get-rest-apis --query "items[?name=='VoiceRecorderAPI'].id" --output text --region ap-south-1)
+
+          if [ "$REST_API_ID" = "None" ] || [ -z "$REST_API_ID" ]; then
+            echo "Creating new API Gateway..."
+            REST_API_ID=$(aws apigateway create-rest-api --name "VoiceRecorderAPI" --query 'id' --output text --region ap-south-1)
+          else
+            echo "Using existing API Gateway: $REST_API_ID"
+          fi
+
+          ROOT_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id $REST_API_ID --query 'items[?path==`/`].id' --output text --region ap-south-1)
+
+          AUDIO_RESOURCE_ID=$(aws apigateway get-resources \
+            --rest-api-id $REST_API_ID \
+            --query "items[?path=='/audio'].id" --output text --region ap-south-1)
+
+          if [ -z "$AUDIO_RESOURCE_ID" ]; then
+            echo "Creating /audio resource..."
+            AUDIO_RESOURCE_ID=$(aws apigateway create-resource \
+              --rest-api-id $REST_API_ID \
+              --parent-id $ROOT_RESOURCE_ID \
+              --path-part audio \
+              --query 'id' --output text --region ap-south-1)
+          fi
+
+          create_or_update_endpoint() {
+            ENDPOINT=$1
+            ENDPOINT_RESOURCE_ID=$(aws apigateway get-resources \
+              --rest-api-id $REST_API_ID \
+              --query "items[?path=='/audio/$ENDPOINT'].id" --output text --region ap-south-1)
+
+            if [ -z "$ENDPOINT_RESOURCE_ID" ]; then
+              ENDPOINT_RESOURCE_ID=$(aws apigateway create-resource \
+                --rest-api-id $REST_API_ID \
+                --parent-id $AUDIO_RESOURCE_ID \
+                --path-part $ENDPOINT \
+                --query 'id' --output text --region ap-south-1)
+            fi
+
+            aws apigateway put-method \
+              --rest-api-id $REST_API_ID \
+              --resource-id $ENDPOINT_RESOURCE_ID \
+              --http-method POST \
+              --authorization-type "NONE" \
+              --region ap-south-1 || true
+
+            aws apigateway put-integration \
+              --rest-api-id $REST_API_ID \
+              --resource-id $ENDPOINT_RESOURCE_ID \
+              --http-method POST \
+              --type AWS_PROXY \
+              --integration-http-method POST \
+              --uri "arn:aws:apigateway:ap-south-1:lambda:path/2015-03-31/functions/arn:aws:lambda:ap-south-1:${{ secrets.AWS_ACCOUNT_ID }}:function:VoiceRecorderFunction/invocations" \
+              --region ap-south-1 || true
+
+            aws apigateway put-method-response \
+              --rest-api-id $REST_API_ID \
+              --resource-id $ENDPOINT_RESOURCE_ID \
+              --http-method POST \
+              --status-code 200 \
+              --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":true}" \
+              --region ap-south-1 || true
+
+            aws apigateway put-integration-response \
+              --rest-api-id $REST_API_ID \
+              --resource-id $ENDPOINT_RESOURCE_ID \
+              --http-method POST \
+              --status-code 200 \
+              --response-parameters "{\"method.response.header.Access-Control-Allow-Origin\":\"'*'\"}" \
+              --region ap-south-1 || true
+          }
+
+          create_or_update_endpoint "add"
+          create_or_update_endpoint "list"
+          create_or_update_endpoint "merge"
+          create_or_update_endpoint "remove"
+
+          aws apigateway create-deployment \
+            --rest-api-id $REST_API_ID \
+            --stage-name $STAGE_NAME \
+            --region ap-south-1
+
+          echo "API Gateway endpoint: https://${REST_API_ID}.execute-api.ap-south-1.amazonaws.com/${STAGE_NAME}/audio/"
+
+      # Step 11: Add API Gateway invoke permissions to Lambda function
+      - name: Add invoke permission to Lambda
+        run: |
+          echo "Adding invoke permissions for API Gateway..."
+          aws lambda add-permission \
+            --function-name VoiceRecorderFunction \
+            --statement-id apigateway-invoke-permission \
+            --action lambda:InvokeFunction \
+            --principal apigateway.amazonaws.com \
+            --source-arn "arn:aws:execute-api:ap-south-1:${{ secrets.AWS_ACCOUNT_ID }}:*" \
+            --region ap-south-1 || echo "Invoke permission already exists."
