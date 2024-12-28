@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - qa
+    paths:
+      - 'backendServerless/**' # Trigger only when files in backendServerless are modified
+      - '.github/workflows/**' # Trigger only when files in .github/workflows are modified
 
 jobs:
   deploy:
