@@ -1,4 +1,4 @@
-/* General styles */
+/* General styles
 body {
   margin: 0;
   font-family: Arial, sans-serif;
@@ -252,4 +252,70 @@ button:hover:not(:disabled) {
 
 .remove-icon:hover {
   color: #e53935;
+} */
+
+/* General styles */
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: #f7f7f7;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+/* Main container */
+.recording-page {
+  text-align: center;
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.recording-page h1 {
+  margin-bottom: 20px;
+  font-size: 2rem;
+  color: #333;
+}
+
+/* Controls */
+.controls {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.controls button {
+  padding: 10px 20px;
+  font-size: 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.controls button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.controls button:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+.controls button:first-of-type {
+  background-color: #007bff;
+  color: white;
+}
+
+.controls button:nth-of-type(2) {
+  background-color: #28a745;
+  color: white;
+}
+
+.controls button:last-of-type {
+  background-color: #ffc107;
+  color: black;
 }
