@@ -138,8 +138,8 @@ jobs:
             echo "Updating Lambda function configuration..."
             aws lambda update-function-configuration \
               --function-name VoiceRecorderFunction \
-              --timeout 6 \
-              --memory-size 512 \
+              --timeout 15 \
+              --memory-size 1024 \
               --layers ${{ env.FFMPEG_LAYER_VERSION_ARN }} ${{ env.DEPENDENCIES_LAYER_VERSION_ARN }} \
               --region ap-south-1
           fi
