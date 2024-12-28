@@ -34,6 +34,10 @@ export const handler = async (event) => {
         };
         console.log("Error: ", error);
     }
-
+    response.headers = {
+        "Access-Control-Allow-Origin": "*", // Allow all origins
+        "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
+        "Access-Control-Allow-Methods": "OPTIONS,POST,GET",
+    };
     return response;
 };

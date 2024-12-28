@@ -1,29 +1,40 @@
-import React, { useState, useRef, useEffect } from 'react';
-import Recorder from 'recorder-js';
-import './RecordingPage.css';
+import React, { useState, useRef, useEffect } from "react";
+import Recorder from "recorder-js";
+import { v4 as uuidv4 } from "uuid"; // To generate chunk UUIDs
+import {
+  sendChunks,
+  mergeChunks,
+  listFiles,
+  removeFile,
+} from "../utils/apiService"; // Import API methods
+import "./RecordingPage.css";
 
 const RecordingPage = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [chunkDuration, setChunkDuration] = useState(10);
   const [chunkCount, setChunkCount] = useState(0);
   const [totalDuration, setTotalDuration] = useState(0);
-  const [recordedChunks, setRecordedChunks] = useState([]);
+  const [recordingName, setRecordingName] = useState("");
   const [savedRecordings, setSavedRecordings] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const recorderRef = useRef(null);
   const intervalRef = useRef(null);
+  const [chunkUuid, setChunkUuid] = useState(uuidv4());
 
-  // Load recordings from localStorage on mount
+  // Fetch recordings from the backend on mount
   useEffect(() => {
-    const storedRecordings = JSON.parse(localStorage.getItem('savedRecordings')) || [];
-    setSavedRecordings(storedRecordings);
+    fetchRecordings();
   }, []);
 
-  // Save recordings to localStorage whenever they are updated
-  useEffect(() => {
-    localStorage.setItem('savedRecordings', JSON.stringify(savedRecordings));
-  }, [savedRecordings]);
+  const fetchRecordings = async () => {
+    try {
+      const response = await listFiles();
+      setSavedRecordings(response.files || []);
+    } catch (error) {
+      console.error("Error fetching recordings:", error);
+    }
+  };
 
   const initializeRecorder = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -37,15 +48,24 @@ const RecordingPage = () => {
     setIsRecording(true);
     setChunkCount(0);
     setTotalDuration(0);
-    setRecordedChunks([]);
+    setChunkUuid(uuidv4()); // Generate a new UUID for this recording session
 
     recorderRef.current.start();
 
     intervalRef.current = setInterval(async () => {
       const { blob } = await recorderRef.current.stop();
 
-      // Save the blob for later use
-      setRecordedChunks((prev) => [...prev, blob]);
+      // Upload chunk to the backend
+      try {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const base64Data = reader.result.split(",")[1];
+          await sendChunks(chunkUuid, base64Data);
+        };
+        reader.readAsDataURL(blob);
+      } catch (error) {
+        console.error("Error uploading chunk:", error);
+      }
 
       recorderRef.current.start();
       setChunkCount((prev) => prev + 1);
@@ -56,68 +76,51 @@ const RecordingPage = () => {
   const stopRecording = async () => {
     setIsRecording(false);
     clearInterval(intervalRef.current);
+
     if (recorderRef.current) {
       const { blob } = await recorderRef.current.stop();
-      setRecordedChunks((prev) => [...prev, blob]);
 
-      const recordedTime = Math.floor(performance.now() / 1000) % chunkDuration;
+      // Upload the last chunk to the backend
+      try {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const base64Data = reader.result.split(",")[1];
+          await sendChunks(chunkUuid, base64Data);
+        };
+        reader.readAsDataURL(blob);
+      } catch (error) {
+        console.error("Error uploading last chunk:", error);
+      }
+
       setChunkCount((prev) => prev + 1);
-      setTotalDuration((prev) => prev + recordedTime);
     }
   };
 
-  const saveRecording = () => {
-    if (recordedChunks.length === 0) return;
+  const mergeRecording = async () => {
+    if (!recordingName.match(/^[a-zA-Z_-]+$/)) {
+      alert("Recording name must only contain letters, underscores, or dashes.");
+      return;
+    }
 
-    const audioBlob = new Blob(recordedChunks);
-    const newRecording = {
-      id: Date.now(),
-      name: `Recording ${savedRecordings.length + 1}`,
-      chunkCount,
-      totalDuration,
-      recordedAt: new Date().toLocaleString(),
-      audioBlob,
-    };
-    setSavedRecordings((prev) => [...prev, newRecording]);
-  };
-
-  const toggleRecording = () => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
+    try {
+      const response = await mergeChunks(chunkUuid, recordingName);
+      alert(response.message);
+      fetchRecordings(); // Refresh the recordings list
+    } catch (error) {
+      console.error("Error merging chunks:", error);
     }
   };
 
-  const handleChunkDurationChange = (e) => {
-    const value = Math.min(Math.max(Number(e.target.value), 1), 60); // Ensure 1-60 range
-    setChunkDuration(value);
-  };
-
-  const handlePlayAudio = () => {
-    if (recordedChunks.length === 0) return;
-
-    const audioURL = URL.createObjectURL(new Blob(recordedChunks));
-    const audio = new Audio(audioURL);
-    audio.play();
-  };
-
-  const handlePlaySavedRecording = (audioBlob) => {
-    const audioURL = URL.createObjectURL(audioBlob);
-    const audio = new Audio(audioURL);
-    audio.play();
-  };
-
-  const handleDownload = (audioBlob, name) => {
-    const audioURL = URL.createObjectURL(audioBlob);
-    const link = document.createElement('a');
-    link.href = audioURL;
-    link.download = name;
-    link.click();
-  };
-
-  const handleRemove = (id) => {
-    setSavedRecordings((prev) => prev.filter((recording) => recording.id !== id));
+  const handleRemove = async (recordingName) => {
+    if (window.confirm("Are you sure you want to delete this recording?")) {
+      try {
+        const response = await removeFile(recordingName);
+        alert(response.message);
+        fetchRecordings(); // Refresh the recordings list
+      } catch (error) {
+        console.error("Error deleting recording:", error);
+      }
+    }
   };
 
   const nextPage = () => {
@@ -138,37 +141,31 @@ const RecordingPage = () => {
         <table className="recordings-table">
           <thead>
             <tr>
+              <th>Sl No.</th>
               <th>Name</th>
-              <th>Chunks</th>
-              <th>Total Duration</th>
+              <th>Size</th>
               <th>Recorded At</th>
               <th>Action</th>
             </tr>
           </thead>
           <tbody>
             {currentItems.length > 0 ? (
-              currentItems.map((recording) => (
-                <tr key={recording.id}>
-                  <td>{recording.name}</td>
-                  <td>{recording.chunkCount}</td>
-                  <td>{recording.totalDuration}s</td>
-                  <td>{recording.recordedAt}</td>
+              currentItems.map((recording, index) => (
+                <tr key={recording.recording_name}>
+                  <td>{startIndex + index + 1}</td>
+                  <td>{recording.recording_name}</td>
+                  <td>{(recording.size / 1024).toFixed(2)} KB</td>
+                  <td>{new Date(recording.lastModified).toLocaleString()}</td>
                   <td>
-                    <i
-                      className="fas fa-play action-icon play-icon"
-                      title="Play"
-                      onClick={() => handlePlaySavedRecording(recording.audioBlob)}
-                    ></i>
-                    <i
-                      className="fas fa-download action-icon download-icon"
-                      title="Download"
-                      onClick={() => handleDownload(recording.audioBlob, recording.name)}
-                    ></i>
-                    <i
-                      className="fas fa-trash action-icon remove-icon"
-                      title="Remove"
-                      onClick={() => handleRemove(recording.id)}
-                    ></i>
+                    <button onClick={() => window.open(recording.url, "_blank")}>
+                      Play
+                    </button>
+                    <button onClick={() => window.open(recording.url, "_blank")}>
+                      Download
+                    </button>
+                    <button onClick={() => handleRemove(recording.recording_name)}>
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))
@@ -194,34 +191,26 @@ const RecordingPage = () => {
 
       <div className="recording-right">
         <div className="recording-status">
-          <h3>{isRecording ? 'Recording...' : 'Recording Stopped'}</h3>
+          <h3>{isRecording ? "Recording..." : "Recording Stopped"}</h3>
           <p>Total Duration: {totalDuration}s</p>
           <p>Chunks Recorded: {chunkCount}</p>
         </div>
 
         <div className="recording-controls">
-          <button onClick={toggleRecording} className={isRecording ? 'stop-button' : 'record-button'}>
-            {isRecording ? 'Stop Recording' : 'Start Recording'}
-          </button>
           <button
-            onClick={handlePlayAudio}
-            className="play-button"
-            disabled={recordedChunks.length === 0}
+            onClick={() => (isRecording ? stopRecording() : startRecording())}
+            className={isRecording ? "stop-button" : "record-button"}
           >
-            Play All
+            {isRecording ? "Stop Recording" : "Start Recording"}
           </button>
-          <div className="chunk-duration">
-            <label>Chunk Duration (seconds): </label>
-            <input
-              type="number"
-              value={chunkDuration}
-              onChange={handleChunkDurationChange}
-              min="1"
-              max="60"
-            />
-          </div>
-          <button onClick={saveRecording} className="merge-button">
-            Merge and Send
+          <input
+            type="text"
+            placeholder="Recording Name"
+            value={recordingName}
+            onChange={(e) => setRecordingName(e.target.value)}
+          />
+          <button onClick={mergeRecording} className="merge-button">
+            Merge and Save
           </button>
         </div>
       </div>
