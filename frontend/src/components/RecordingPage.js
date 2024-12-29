@@ -225,11 +225,11 @@ import { useRecorder } from "../hooks/useRecorder";
 import { listFiles, removeFile } from "../utils/apiService";
 import { FaPlay, FaDownload, FaTrashAlt } from "react-icons/fa";
 import "./RecordingPage.css";
+import { toast } from "react-toastify";
 
 const RecordingPage = () => {
   const {
     isRecording,
-    // chunkDuration,
     chunkCount,
     totalDuration,
     recordingName,
@@ -237,12 +237,12 @@ const RecordingPage = () => {
     startRecording,
     stopRecording,
     mergeRecording,
-    // setChunkDuration,
+    chunkDuration,
+    setChunkDuration,
   } = useRecorder();
 
   const [savedRecordings, setSavedRecordings] = useState([]);
-  const [currentPage] = useState(1);//setCurrentPage
-  const itemsPerPage = 10;
+  // const itemsPerPage = 10;
 
   useEffect(() => {
     fetchRecordings();
@@ -257,30 +257,49 @@ const RecordingPage = () => {
     }
   };
 
+  const handleChunkDurationChange = (e) => {
+    const duration = parseInt(e.target.value, 10);
+    if (duration > 40) {
+      toast.error("Chunk duration cannot exceed 40 seconds.", {
+        position: "top-right",
+        autoClose: 2000,
+      });
+      return;
+    }
+    setChunkDuration(duration);
+  };
+
+  const handleStartRecording = () => {
+    if (!chunkDuration || chunkDuration > 40) {
+      toast.error("Please provide a valid chunk duration (<= 40 seconds).", {
+        position: "top-right",
+        autoClose: 2000,
+      });
+      return;
+    }
+    startRecording();
+  };
+
   const handleMerge = async () => {
+    if (totalDuration > 40) {
+      toast.error("Total recording duration must be 40 seconds to merge.", {
+        position: "top-right",
+        autoClose: 2000,
+      });
+      return;
+    }
+
     try {
       const message = await mergeRecording();
-      alert(message);
+      toast.success(message, { autoClose: 1000 });
       fetchRecordings(); // Refresh the recordings list
     } catch (error) {
-      alert(error.message);
+      toast.error(error.message, {
+        position: "top-right",
+        autoClose: 2000,
+      });
     }
   };
-
-  const handleRemove = async (recordingName) => {
-    if (window.confirm("Are you sure you want to delete this recording?")) {
-      try {
-        const response = await removeFile(recordingName);
-        alert(response.message);
-        fetchRecordings(); // Refresh the recordings list
-      } catch (error) {
-        console.error("Error deleting recording:", error);
-      }
-    }
-  };
-
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentItems = savedRecordings.slice(startIndex, startIndex + itemsPerPage);
 
   return (
     <div className="recording-page">
@@ -297,10 +316,10 @@ const RecordingPage = () => {
             </tr>
           </thead>
           <tbody>
-            {currentItems.length > 0 ? (
-              currentItems.map((recording, index) => (
+            {savedRecordings.length > 0 ? (
+              savedRecordings.map((recording, index) => (
                 <tr key={recording.recording_name}>
-                  <td>{startIndex + index + 1}</td>
+                  <td>{index + 1}</td>
                   <td>{recording.recording_name}</td>
                   <td>{(recording.size / 1024).toFixed(2)} KB</td>
                   <td>{new Date(recording.lastModified).toLocaleString()}</td>
@@ -315,7 +334,7 @@ const RecordingPage = () => {
                       className="action-icon download"
                     />
                     <FaTrashAlt
-                      onClick={() => handleRemove(recording.recording_name)}
+                      onClick={() => removeFile(recording.recording_name)}
                       title="Delete"
                       className="action-icon delete"
                     />
@@ -339,8 +358,18 @@ const RecordingPage = () => {
         </div>
 
         <div className="recording-controls">
+          <div className="input-group">
+            <label htmlFor="chunk-duration">Chunk Duration (seconds):</label>
+            <input
+              type="number"
+              id="chunk-duration"
+              value={chunkDuration}
+              onChange={handleChunkDurationChange}
+              disabled={isRecording}
+            />
+          </div>
           <button
-            onClick={() => (isRecording ? stopRecording() : startRecording())}
+            onClick={isRecording ? stopRecording : handleStartRecording}
             className={isRecording ? "stop-button" : "record-button"}
           >
             {isRecording ? "Stop Recording" : "Start Recording"}
@@ -350,10 +379,21 @@ const RecordingPage = () => {
             placeholder="Recording Name"
             value={recordingName}
             onChange={(e) => setRecordingName(e.target.value)}
+            disabled={isRecording}
           />
-          <button onClick={handleMerge} className="merge-button">
-            Merge and Save
+          <button
+            onClick={handleMerge}
+            className="merge-button"
+            disabled={
+              isRecording || // Disable if recording is in progress
+              !recordingName || // Disable if recording name is empty
+              totalDuration === 0 || // Disable if no recording has occurred
+              totalDuration > 40 // Ensure merge is only possible if within the 40s limit
+            }
+          >
+            Merge
           </button>
+
         </div>
       </div>
     </div>
@@ -361,4 +401,3 @@ const RecordingPage = () => {
 };
 
 export default RecordingPage;
-

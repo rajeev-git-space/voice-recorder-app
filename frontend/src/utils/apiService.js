@@ -17,7 +17,7 @@ export const sendChunks = async (chunkUuid, blobData) => {
     return response.json();
   } catch (error) {
     toast.error(error.message, {
-      position: toast.POSITION.BOTTOM_CENTER,
+      position: "top-right",
       autoClose: 2000,
     });
   }
@@ -35,7 +35,7 @@ export const mergeChunks = async (chunkUuid, recordingName) => {
     return response.json();
   } catch (error) {
     toast.error(error.message, {
-      position: toast.POSITION.BOTTOM_CENTER,
+      position: "top-right",
       autoClose: 2000,
     });
   }
@@ -53,7 +53,7 @@ export const listFiles = async () => {
     return response.json();
   } catch (error) {
     toast.error(error.message, {
-      position: toast.POSITION.BOTTOM_CENTER,
+      position: "top-right",
       autoClose: 2000,
     });
   }
@@ -71,7 +71,7 @@ export const removeFile = async (recordingName) => {
     return response.json();
   } catch (error) {
     toast.error(error.message, {
-      position: toast.POSITION.BOTTOM_CENTER,
+      position: "top-right",
       autoClose: 2000,
     });
   }

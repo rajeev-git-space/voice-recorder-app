@@ -34,12 +34,11 @@ export const useRecorder = () => {
     intervalRef.current = setInterval(async () => {
       const { blob } = await recorderRef.current.stop();
 
-      // Upload chunk to the backend
       try {
         const reader = new FileReader();
         reader.onload = async () => {
           const base64Data = reader.result.split(",")[1];
-          await sendChunks(sessionUuid, base64Data); // Use sessionUuid for chunks
+          await sendChunks(sessionUuid, base64Data);
         };
         reader.readAsDataURL(blob);
       } catch (error) {
@@ -47,8 +46,15 @@ export const useRecorder = () => {
       }
 
       recorderRef.current.start();
+
       setChunkCount((prev) => prev + 1);
-      setTotalDuration((prev) => prev + chunkDuration);
+      setTotalDuration((prev) => {
+        const newTotal = prev + chunkDuration;
+        if (newTotal >= 40) {
+          stopRecording(); // Stop recording at the 40s limit
+        }
+        return newTotal;
+      });
     }, chunkDuration * 1000);
   };
 
