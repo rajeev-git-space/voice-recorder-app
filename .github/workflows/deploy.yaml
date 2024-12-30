@@ -84,7 +84,7 @@ jobs:
               --zip-file fileb://backendServerless/lambda.zip \
               --timeout 15 \
               --memory-size 1024 \
-              --ephemeral-storage '{"Size": 1024}'
+              --ephemeral-storage 1024 \
               --region ap-south-1 \
               --package-type Zip
           else
@@ -99,7 +99,7 @@ jobs:
               --function-name VoiceRecorderFunction \
               --timeout 15 \
               --memory-size 1024 \
-              --ephemeral-storage '{"Size": 1024}'
+              --ephemeral-storage 1024 \
               --layers ${{ env.DEPENDENCIES_LAYER_VERSION_ARN }} \
               --region ap-south-1
           fi
