@@ -50,7 +50,7 @@ A modern, user-friendly voice recording application built with a serverless back
    - S3
    - CloudWatch
 3. GitHub repository set up with security variables for AWS credentials.
-4. Installed IDE (e.g., VS Code).
+4. Installed IDE (VS Code).
 
 ---
 
