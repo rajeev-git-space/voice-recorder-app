@@ -1,0 +1,317 @@
+/* Main container for the recording page */
+.recording-page {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Left side: Saved recordings table */
+.recording-left {
+  flex: 2;
+  padding: 20px;
+  overflow-y: hidden;
+  background-color: #ffffff;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.recording-left h2 {
+  margin-bottom: 20px;
+  font-size: 1.5rem;
+  color: #333;
+}
+
+/* Recordings table styles */
+.recordings-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+
+.recordings-table th,
+.recordings-table td {
+  padding: 10px;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+.recordings-table th {
+  background-color: #f4f4f4;
+  color: #333;
+  font-weight: bold;
+}
+
+.recordings-table tr:nth-child(even) {
+  background-color: #fafafa;
+}
+
+.recordings-table tr:hover {
+  background-color: #f0f8ff;
+}
+
+/* Pagination controls */
+.pagination-controls {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.pagination-controls button {
+  padding: 10px 20px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.pagination-controls button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.pagination-controls button:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+/* Right side: Recording controls */
+.recording-right {
+  flex: 1;
+  padding: 20px;
+  border-left: 1px solid #ddd;
+  background-color: #f9f9f9;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+
+.recording-right h3 {
+  font-size: 1.25rem;
+  color: #333;
+}
+
+.recording-right p {
+  font-size: 1rem;
+  color: #555;
+  margin: 5px 0;
+}
+
+/* Buttons */
+button {
+  margin: 10px 0;
+  padding: 10px 20px;
+  font-size: 1rem;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+button:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+
+.record-button {
+  background-color: #28a745;
+  color: white;
+}
+
+.stop-button {
+  background-color: #dc3545;
+  color: white;
+}
+
+/* .play-button {
+  background-color: #007bff;
+  color: white;
+} */
+
+.merge-button {
+  background-color: #ffc107;
+  color: white;
+}
+
+/* Chunk duration input */
+.chunk-duration {
+  margin-top: 20px;
+}
+
+.chunk-duration label {
+  font-size: 1rem;
+  margin-right: 10px;
+}
+
+.chunk-duration input {
+  width: 60px;
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .recording-page {
+    flex-direction: column;
+  }
+
+  .recording-left,
+  .recording-right {
+    flex: 1;
+    width: 100%;
+    border: none;
+    padding: 10px;
+  }
+
+  .recording-right {
+    border-top: 1px solid #ddd;
+  }
+}
+
+.recordings-table button {
+  margin-right: 10px;
+}
+
+.play-button {
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.play-button:hover {
+  background-color: #45a049;
+}
+
+.download-button {
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.download-button:hover {
+  background-color: #1e88e5;
+}
+
+.remove-button {
+  background-color: #f44336;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.remove-button:hover {
+  background-color: #e53935;
+}
+
+/* Icon styles for actions */
+.action-icon {
+  cursor: pointer;
+  margin-right: 8px;
+}
+
+.action-icon.play {
+  color: blue;
+}
+
+.action-icon.download {
+  color: green;
+}
+
+.action-icon.delete {
+  color: red;
+}
+
+.action-icon:hover {
+  opacity: 0.8; /* Optional hover effect */
+}
+
+.download-icon:hover {
+  color: #1e88e5;
+}
+
+.remove-icon {
+  color: #f44336;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.remove-icon:hover {
+  color: #e53935;
+} */
+
+/* General styles */
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: #f7f7f7;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+/* Main container */
+.recording-page {
+  text-align: center;
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.recording-page h1 {
+  margin-bottom: 20px;
+  font-size: 2rem;
+  color: #333;
+}
+
+/* Controls */
+.controls {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.controls button {
+  padding: 10px 20px;
+  font-size: 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.controls button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.controls button:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+.controls button:first-of-type {
+  background-color: #007bff;
+  color: white;
+}
+
+.controls button:nth-of-type(2) {
+  background-color: #28a745;
+  color: white;
+}
+
+.controls button:last-of-type {
+  background-color: #ffc107;
+  color: black;
+}
