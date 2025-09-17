@@ -58,8 +58,8 @@ A modern, user-friendly voice recording application built with a serverless back
 
 #### **Clone the Repository**
 ```bash
-git clone https://github.com/rajeev-git-space/ec-assignment-voice-recorder.git
-cd ec-assignment-voice-recorder
+git clone https://github.com/rajeev-git-space/voice-recorder-app.git
+cd voice-recorder-app
 ```
 
 #### **Frontend Setup Instructions**
