@@ -1,6 +1,6 @@
 import { toast } from 'react-toastify';
 
-const BASE_URL = "https://8jzk1yk1me.execute-api.ap-south-1.amazonaws.com/dev/audio";
+const BASE_URL = process.env.REACT_APP_API_URL;
 
 export const sendChunks = async (chunkUuid, blobData) => {
   try {
